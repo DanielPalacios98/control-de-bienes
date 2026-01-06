@@ -1,0 +1,8 @@
+
+{
+  "name": "Control de Bienes - FAE",
+  "description": "Una plataforma robusta para el control centralizado de enseres de la Fuerza Aérea Ecuatoriana, con soporte para sucursales y roles.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
