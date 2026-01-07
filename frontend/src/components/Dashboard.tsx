@@ -1,147 +1,186 @@
 
-import React, { useState, useMemo } from 'react';
-import { 
-  Equipment, 
-  EquipmentStatus, 
-  EquipmentCondition, 
-  Movement, 
-  MovementType, 
-  Branch, 
-  UnitType, 
-  UserRole, 
+
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  Equipment,
+  EquipmentStatus,
+  EquipmentCondition,
+  Movement,
+  MovementType,
+  Branch,
+  UnitType,
+  UserRole,
   User,
   LocationType
 } from '../types';
-import { mockBranches, initialInventory, mockMovements } from '../services/mockData';
+import { mockMovements } from '../services/mockData';
+import { inventoryAPI, branchAPI, BranchResponse } from '../services/api';
+import { convertToEquipment, convertFromEquipment } from '../services/converters';
 
 interface DashboardProps {
   user: User;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
-  const [inventory, setInventory] = useState<Equipment[]>(initialInventory);
+  const [inventory, setInventory] = useState<Equipment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [movements, setMovements] = useState<Movement[]>(mockMovements);
+  const [branches, setBranches] = useState<BranchResponse[]>([]);
   const [activeView, setActiveView] = useState<'inventory' | 'history'>('inventory');
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBranch, setFilterBranch] = useState(user.role === UserRole.BRANCH_ADMIN ? user.branchId : 'all');
   const [filterLocation, setFilterLocation] = useState<string>('all');
-  
+
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<'individual' | 'quantity' | 'bulk'>('individual');
-  
+
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Equipment | null>(null);
 
+  // Load inventory and branches from API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [inventoryData, branchData] = await Promise.all([
+          inventoryAPI.getAll(),
+          branchAPI.getAll()
+        ]);
+        setInventory(inventoryData.map(convertToEquipment));
+        setBranches(branchData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   const filteredInventory = useMemo(() => {
     return inventory.filter(item => {
-      const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            (item.inventoryId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                            item.currentResponsibleName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.inventoryId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        item.currentResponsibleName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBranch = filterBranch === 'all' || item.branchId === filterBranch;
       const matchesLocation = filterLocation === 'all' || item.locationType === filterLocation;
       return matchesSearch && matchesBranch && matchesLocation;
     });
   }, [inventory, searchTerm, filterBranch, filterLocation]);
 
-  const handleEntry = (e: React.FormEvent) => {
+  const handleEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget as HTMLFormElement);
     const data = Object.fromEntries(formData);
     const timestamp = new Date().toISOString();
-    const branch = mockBranches.find(b => b.id === data.branchId);
-    
-    if (entryType === 'individual') {
-      const newItem: Equipment = {
-        id: `SYS-${Date.now()}`,
-        inventoryId: data.inventoryId as string,
-        hasIndividualId: true,
-        description: data.description as string,
-        unit: data.unit as UnitType,
-        condition: data.condition as EquipmentCondition,
-        status: EquipmentStatus.AVAILABLE,
-        locationType: LocationType.BODEGA,
-        entryDate: timestamp.split('T')[0],
-        currentResponsibleId: branch?.managerId || '',
-        currentResponsibleName: branch?.managerName || '',
-        branchId: data.branchId as string,
-        stock: 1
-      };
-      setInventory(prev => [...prev, newItem]);
-    } else if (entryType === 'quantity') {
-      const newItem: Equipment = {
-        id: `SYS-${Date.now()}`,
-        hasIndividualId: false,
-        description: data.description as string,
-        unit: data.unit as UnitType,
-        condition: data.condition as EquipmentCondition,
-        status: EquipmentStatus.AVAILABLE,
-        locationType: LocationType.BODEGA,
-        entryDate: timestamp.split('T')[0],
-        currentResponsibleId: branch?.managerId || '',
-        currentResponsibleName: branch?.managerName || '',
-        branchId: data.branchId as string,
-        stock: Number(data.quantity)
-      };
-      setInventory(prev => [...prev, newItem]);
-    } else if (entryType === 'bulk') {
-      const qty = Number(data.quantity);
-      const newItems: Equipment[] = [];
-      for (let i = 1; i <= qty; i++) {
-        newItems.push({
-          id: `SYS-${Date.now()}-${i}`,
-          inventoryId: `${data.prefix || 'ID'}-${Date.now()}-${i}`,
+    const branchId = (data.branchId as string) || user.branchId || branches[0]?._id || '';
+
+    if (!branchId || branchId === '') {
+      alert('Por favor selecciona una sucursal válida');
+      return;
+    }
+
+    console.log('Creating equipment with branchId:', branchId);
+
+    try {
+      if (entryType === 'individual') {
+        const newItem = await inventoryAPI.create({
+          inventoryId: data.inventoryId as string,
           hasIndividualId: true,
           description: data.description as string,
-          unit: data.unit as UnitType,
-          condition: data.condition as EquipmentCondition,
-          status: data.destination === 'egreso' ? EquipmentStatus.IN_USE : EquipmentStatus.AVAILABLE,
-          locationType: data.destination === 'egreso' ? LocationType.EN_USO : LocationType.BODEGA,
+          unit: data.unit as string,
+          condition: data.condition as string,
+          status: EquipmentStatus.AVAILABLE,
+          locationType: LocationType.BODEGA,
           entryDate: timestamp.split('T')[0],
-          currentResponsibleId: branch?.managerId || '',
-          currentResponsibleName: branch?.managerName || '',
-          branchId: data.branchId as string,
+          currentResponsibleId: user.id,
+          branchId: branchId,
           stock: 1
         });
+        setInventory(prev => [...prev, convertToEquipment(newItem)]);
+      } else if (entryType === 'quantity') {
+        const newItem = await inventoryAPI.create({
+          hasIndividualId: false,
+          description: data.description as string,
+          unit: data.unit as string,
+          condition: data.condition as string,
+          status: EquipmentStatus.AVAILABLE,
+          locationType: LocationType.BODEGA,
+          entryDate: timestamp.split('T')[0],
+          currentResponsibleId: user.id,
+          branchId: branchId,
+          stock: Number(data.quantity)
+        });
+        setInventory(prev => [...prev, convertToEquipment(newItem)]);
+      } else if (entryType === 'bulk') {
+        const qty = Number(data.quantity);
+        for (let i = 1; i <= qty; i++) {
+          const newItem = await inventoryAPI.create({
+            inventoryId: `${data.prefix || 'ID'}-${Date.now()}-${i}`,
+            hasIndividualId: true,
+            description: data.description as string,
+            unit: data.unit as string,
+            condition: data.condition as string,
+            status: data.destination === 'egreso' ? EquipmentStatus.IN_USE : EquipmentStatus.AVAILABLE,
+            locationType: data.destination === 'egreso' ? LocationType.EN_USO : LocationType.BODEGA,
+            entryDate: timestamp.split('T')[0],
+            currentResponsibleId: user.id,
+            branchId: branchId,
+            stock: 1
+          });
+          setInventory(prev => [...prev, convertToEquipment(newItem)]);
+        }
       }
-      setInventory(prev => [...prev, ...newItems]);
+      setIsEntryModalOpen(false);
+    } catch (error) {
+      console.error('Error creating equipment:', error);
+      alert('Error al crear el equipo');
     }
-    setIsEntryModalOpen(false);
   };
 
-  const handleEdit = (e: React.FormEvent) => {
+  const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
     const formData = new FormData(e.currentTarget as HTMLFormElement);
     const data = Object.fromEntries(formData);
 
-    setInventory(prev => prev.map(item => {
-      if (item.id === selectedItem.id) {
-        return {
-          ...item,
-          description: data.description as string,
-          inventoryId: item.hasIndividualId ? data.inventoryId as string : undefined,
-          condition: data.condition as EquipmentCondition,
-          currentResponsibleName: data.currentResponsibleName as string,
-          currentResponsibleId: data.currentResponsibleId as string,
-          locationType: data.locationType as LocationType,
-          branchId: data.branchId as string,
-          stock: item.hasIndividualId ? 1 : Number(data.stock)
-        };
-      }
-      return item;
-    }));
-    setIsEditModalOpen(false);
-    setSelectedItem(null);
+    try {
+      const updated = await inventoryAPI.update(selectedItem.id, {
+        description: data.description as string,
+        inventoryId: selectedItem.hasIndividualId ? data.inventoryId as string : undefined,
+        condition: data.condition as string,
+        currentResponsibleId: data.currentResponsibleId as string,
+        locationType: data.locationType as string,
+        branchId: data.branchId as string,
+        stock: selectedItem.hasIndividualId ? 1 : Number(data.stock)
+      });
+
+      setInventory(prev => prev.map(item =>
+        item.id === selectedItem.id ? convertToEquipment(updated) : item
+      ));
+      setIsEditModalOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error('Error updating equipment:', error);
+      alert('Error al actualizar el equipo');
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedItem) return;
-    setInventory(prev => prev.filter(item => item.id !== selectedItem.id));
-    setIsDeleteConfirmOpen(false);
-    setSelectedItem(null);
+
+    try {
+      await inventoryAPI.delete(selectedItem.id);
+      setInventory(prev => prev.filter(item => item.id !== selectedItem.id));
+      setIsDeleteConfirmOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error('Error deleting equipment:', error);
+      alert('Error al eliminar el equipo');
+    }
   };
 
   const handleExit = (e: React.FormEvent) => {
@@ -182,9 +221,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           return item;
         }).filter(item => item.stock > 0);
 
-        const existingInUseIndex = updated.findIndex(i => 
-          i.description === selectedItem.description && 
-          i.currentResponsibleId === respId && 
+        const existingInUseIndex = updated.findIndex(i =>
+          i.description === selectedItem.description &&
+          i.currentResponsibleId === respId &&
           i.locationType === LocationType.EN_USO
         );
 
@@ -237,13 +276,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <p className="text-slate-500 font-medium">Control de Inventario</p>
         </div>
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={() => setIsEntryModalOpen(true)}
             className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all active:scale-95"
           >
             <i className="fas fa-plus-circle mr-2"></i> Nuevo Ingreso
           </button>
-          <button 
+          <button
             onClick={() => setActiveView(activeView === 'inventory' ? 'history' : 'inventory')}
             className="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all"
           >
@@ -258,8 +297,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Filtro de Búsqueda</label>
           <div className="relative">
             <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Buscar por descripción, ID o responsable..."
               className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               value={searchTerm}
@@ -269,7 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
         <div className="w-full md:w-56 space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ubicación</label>
-          <select 
+          <select
             className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
             value={filterLocation}
             onChange={(e) => setFilterLocation(e.target.value)}
@@ -281,13 +320,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
         <div className="w-full md:w-56 space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Área / Sucursal</label>
-          <select 
+          <select
             className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
             value={filterBranch}
             onChange={(e) => setFilterBranch(e.target.value)}
           >
             <option value="all">Todas las Bodegas</option>
-            {mockBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
           </select>
         </div>
       </div>
@@ -325,27 +364,25 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                         <span className="text-[10px] font-black text-slate-400 uppercase border border-slate-200 px-1.5 rounded">
                           {item.unit}
                         </span>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                          item.condition === EquipmentCondition.SERVIBLE ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                        }`}>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${item.condition === EquipmentCondition.SERVIBLE ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                          }`}>
                           {item.condition}
                         </span>
                       </div>
                     </td>
                     <td className="px-8 py-5 text-center">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                        item.locationType === LocationType.BODEGA ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-700'
-                      }`}>
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${item.locationType === LocationType.BODEGA ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-700'
+                        }`}>
                         <i className={`fas ${item.locationType === LocationType.BODEGA ? 'fa-warehouse' : 'fa-user-tag'}`}></i>
-                        {item.locationType === LocationType.BODEGA 
-                          ? mockBranches.find(b => b.id === item.branchId)?.name || 'BODEGA'
+                        {item.locationType === LocationType.BODEGA
+                          ? branches.find(b => b._id === item.branchId)?.name || 'BODEGA'
                           : item.locationType}
                       </span>
                     </td>
                     <td className="px-8 py-5 text-center">
-                       <span className={`text-lg font-black ${item.stock <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-                         {item.stock}
-                       </span>
+                      <span className={`text-lg font-black ${item.stock <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                        {item.stock}
+                      </span>
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex flex-col">
@@ -356,7 +393,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-2">
                         {item.locationType === LocationType.BODEGA && (
-                          <button 
+                          <button
                             onClick={() => { setSelectedItem(item); setIsExitModalOpen(true); }}
                             className="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white p-2 rounded-xl transition-all shadow-sm"
                             title="Registrar Egreso"
@@ -364,14 +401,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                             <i className="fas fa-sign-out-alt"></i>
                           </button>
                         )}
-                        <button 
+                        <button
                           onClick={() => { setSelectedItem(item); setIsEditModalOpen(true); }}
                           className="bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white p-2 rounded-xl transition-all shadow-sm"
                           title="Editar Registro"
                         >
                           <i className="fas fa-pen"></i>
                         </button>
-                        <button 
+                        <button
                           onClick={() => { setSelectedItem(item); setIsDeleteConfirmOpen(true); }}
                           className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white p-2 rounded-xl transition-all shadow-sm"
                           title="Eliminar Registro"
@@ -396,35 +433,35 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
       ) : (
         <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 p-10">
-           <div className="flex items-center justify-between mb-8">
-             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Registro Maestro de Auditoría</h2>
-             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-full">Trazabilidad de Activos</div>
-           </div>
-           <div className="space-y-4">
-             {movements.length === 0 ? (
-               <p className="text-center py-10 text-slate-400 italic">No hay movimientos registrados.</p>
-             ) : (
-               [...movements].reverse().map(m => (
-                 <div key={m.id} className="flex items-center gap-6 p-5 bg-slate-50/50 rounded-2xl border border-slate-100 text-xs hover:border-indigo-100 transition-all">
-                   <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                      <i className={`fas ${m.type === MovementType.OUT ? 'fa-arrow-up text-rose-500' : 'fa-arrow-down text-emerald-500'}`}></i>
-                   </div>
-                   <div className="flex-1">
-                     <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-800 uppercase">{m.type} DE {m.quantity} UNIDADES</span>
-                        <span className="text-slate-300">•</span>
-                        <span className="text-slate-400 font-mono">{new Date(m.timestamp).toLocaleString()}</span>
-                     </div>
-                     <p className="mt-1 text-slate-500">Bien entregado a <span className="font-bold text-slate-700">{m.responsibleName}</span></p>
-                   </div>
-                   <div className="text-right">
-                     <span className="block text-[10px] font-black text-slate-400 uppercase">Autorizado por</span>
-                     <span className="font-bold text-indigo-600">{m.performedByUserId}</span>
-                   </div>
-                 </div>
-               ))
-             )}
-           </div>
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Registro Maestro de Auditoría</h2>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-full">Trazabilidad de Activos</div>
+          </div>
+          <div className="space-y-4">
+            {movements.length === 0 ? (
+              <p className="text-center py-10 text-slate-400 italic">No hay movimientos registrados.</p>
+            ) : (
+              [...movements].reverse().map(m => (
+                <div key={m.id} className="flex items-center gap-6 p-5 bg-slate-50/50 rounded-2xl border border-slate-100 text-xs hover:border-indigo-100 transition-all">
+                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                    <i className={`fas ${m.type === MovementType.OUT ? 'fa-arrow-up text-rose-500' : 'fa-arrow-down text-emerald-500'}`}></i>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-800 uppercase">{m.type} DE {m.quantity} UNIDADES</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-slate-400 font-mono">{new Date(m.timestamp).toLocaleString()}</span>
+                    </div>
+                    <p className="mt-1 text-slate-500">Bien entregado a <span className="font-bold text-slate-700">{m.responsibleName}</span></p>
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-[10px] font-black text-slate-400 uppercase">Autorizado por</span>
+                    <span className="font-bold text-indigo-600">{m.performedByUserId}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -492,8 +529,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bodega Receptora</label>
-                  <select name="branchId" className={inputClasses}>
-                    {mockBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <select name="branchId" defaultValue={branches[0]?._id} required className={inputClasses}>
+                    {branches.length === 0 && <option value="">Cargando sucursales...</option>}
+                    {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -559,14 +597,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Asignación de Bodega</label>
                   <select name="branchId" defaultValue={selectedItem.branchId} className={inputClasses}>
-                    {mockBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
                 </div>
 
                 <div className="col-span-2 grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-3xl">
-                   <div className="col-span-2 mb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable Asignado</div>
-                   <input name="currentResponsibleName" defaultValue={selectedItem.currentResponsibleName} placeholder="Nombre Responsable" className={inputClasses} />
-                   <input name="currentResponsibleId" defaultValue={selectedItem.currentResponsibleId} placeholder="Cédula Responsable" className={inputClasses} />
+                  <div className="col-span-2 mb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable Asignado</div>
+                  <input name="currentResponsibleName" defaultValue={selectedItem.currentResponsibleName} placeholder="Nombre Responsable" className={inputClasses} />
+                  <input name="currentResponsibleId" defaultValue={selectedItem.currentResponsibleId} placeholder="Cédula Responsable" className={inputClasses} />
                 </div>
               </div>
 
@@ -592,13 +630,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                 Esta acción eliminará permanentemente el bien <span className="font-bold text-slate-800">"{selectedItem.description}"</span> de la base de datos logística. Esta operación no se puede deshacer.
               </p>
               <div className="flex gap-4">
-                <button 
+                <button
                   onClick={() => setIsDeleteConfirmOpen(false)}
                   className="flex-1 px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   onClick={handleDelete}
                   className="flex-1 px-6 py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-rose-700 shadow-xl shadow-rose-100 transition-all"
                 >
@@ -617,8 +655,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             <div className="p-10 bg-emerald-600 text-white">
               <h2 className="text-3xl font-black tracking-tight">Orden de Egreso</h2>
               <div className="flex items-center gap-3 mt-2 opacity-80">
-                 <i className="fas fa-box-open text-xs"></i>
-                 <span className="text-[10px] font-black uppercase tracking-widest">{selectedItem.description}</span>
+                <i className="fas fa-box-open text-xs"></i>
+                <span className="text-[10px] font-black uppercase tracking-widest">{selectedItem.description}</span>
               </div>
             </div>
             <form onSubmit={handleExit} className="p-10 space-y-6 overflow-y-auto max-h-[70vh]">
@@ -636,27 +674,27 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <div className="grid grid-cols-1 gap-6">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad a Entregar</label>
-                  <input 
-                    name="quantity" 
-                    type="number" 
-                    max={selectedItem.stock} 
-                    min="1" 
-                    defaultValue={selectedItem.hasIndividualId ? 1 : ''} 
+                  <input
+                    name="quantity"
+                    type="number"
+                    max={selectedItem.stock}
+                    min="1"
+                    defaultValue={selectedItem.hasIndividualId ? 1 : ''}
                     readOnly={selectedItem.hasIndividualId}
-                    required 
-                    className={inputClasses} 
+                    required
+                    className={inputClasses}
                     placeholder="Ingrese cantidad..."
                   />
                 </div>
 
                 <div className="space-y-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Información del Receptor</p>
-                   <div>
-                     <input name="responsibleName" placeholder="Nombre completo y Rango" required className={`${inputClasses} bg-white`} />
-                   </div>
-                   <div>
-                     <input name="responsibleId" placeholder="Número de Cédula" required className={`${inputClasses} bg-white`} />
-                   </div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Información del Receptor</p>
+                  <div>
+                    <input name="responsibleName" placeholder="Nombre completo y Rango" required className={`${inputClasses} bg-white`} />
+                  </div>
+                  <div>
+                    <input name="responsibleId" placeholder="Número de Cédula" required className={`${inputClasses} bg-white`} />
+                  </div>
                 </div>
 
                 <div>

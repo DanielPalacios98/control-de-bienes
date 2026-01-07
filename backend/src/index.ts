@@ -16,8 +16,16 @@ app.use(express.json());
 // Connect to Database
 connectDB();
 
+import authRoutes from './routes/authRoutes';
+import inventoryRoutes from './routes/inventoryRoutes';
+import movementRoutes from './routes/movementRoutes';
+import branchRoutes from './routes/branchRoutes';
+
 // Routes
-// app.use('/api/inventory', inventoryRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/movements', movementRoutes);
+app.use('/api/branches', branchRoutes);
 
 app.get('/', (req, res) => {
     res.send('API Control de Bienes FAE is running');

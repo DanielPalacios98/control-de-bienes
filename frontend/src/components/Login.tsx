@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { User } from '../types';
-import { initialUsers } from '../services/mockData';
+import { User, UserRole } from '../types';
+import { authAPI } from '../services/api';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -11,14 +11,31 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = initialUsers.find(u => u.email === email);
-    if (user) {
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await authAPI.login(email, password);
+
+      // Convert backend response to frontend User type
+      const user: User = {
+        id: response._id,
+        email: response.email,
+        name: response.name,
+        role: response.role as UserRole,
+        branchId: response.branchId,
+        status: 'active'
+      };
+
       onLogin(user);
-    } else {
-      setError('Credenciales no válidas para esta demo. Use: super@invtrack.com');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Error al iniciar sesión. Verifica tus credenciales.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -64,17 +81,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           <button
             type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-4 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-extrabold py-4 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2"
           >
-            <i className="fas fa-lock text-sm opacity-50"></i>
-            Ingresar al Sistema
+            <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-lock'} text-sm opacity-50`}></i>
+            {loading ? 'Verificando...' : 'Ingresar al Sistema'}
           </button>
         </form>
 
         <div className="mt-8 pt-6 border-t border-gray-100 text-center">
           <p className="text-xs text-gray-400 font-medium mb-2 uppercase tracking-tighter">Acceso de Demostración</p>
           <code className="bg-gray-50 px-3 py-1.5 rounded-lg text-indigo-600 font-bold text-xs border border-gray-100 block">
-            super@invtrack.com
+            admin@fae.com / admin123
           </code>
         </div>
       </div>
