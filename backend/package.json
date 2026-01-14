@@ -2,9 +2,9 @@
     "name": "control-de-bienes-backend",
     "version": "1.0.0",
     "description": "Backend API for Control de Bienes",
-    "main": "dist/index.js",
+    "main": "dist-server/index.js",
     "scripts": {
-        "start": "node dist/index.js",
+        "start": "node dist-server/index.js",
         "dev": "nodemon --exec ts-node src/index.ts",
         "build": "tsc"
     },
