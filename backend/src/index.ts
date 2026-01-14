@@ -7,7 +7,7 @@ import connectDB from './db';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT || '8080', 10);
 
 // Middleware
 app.use(cors());
@@ -31,6 +31,6 @@ app.get('/', (req, res) => {
     res.send('API Control de Bienes FAE is running');
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
 });
