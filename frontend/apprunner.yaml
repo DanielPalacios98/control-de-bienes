@@ -3,7 +3,7 @@ runtime: nodejs18
 build:
   commands:
     pre-build:
-      - npm ci
+      - npm ci --include=dev
     build:
       - npm run build
 run:
