@@ -39,9 +39,16 @@ View your app in AI Studio: https://ai.studio/apps/drive/1k8F35GcUBBLSFsaxEb2ljg
 - Asegúrate de que el servicio escuche en el puerto 8080 (el backend lo hace por defecto).
 - Health check: puedes usar `/` del backend para verificar el estado.
 
+### AWS App Runner (Frontend)
+
+- Configura el servicio apuntando al directorio `frontend` y al archivo [frontend/apprunner.yaml](frontend/apprunner.yaml).
+- Build: `npm ci` seguido de `npm run build` (lo define el archivo de configuración).
+- Start: `npm run start:prod` expone el `vite preview` en `0.0.0.0:8080`.
+- Define `VITE_API_URL` con la URL pública del backend para generar el bundle con el endpoint correcto.
+
 ### Pasos de despliegue
 - Conecta el servicio a tu repo/branch.
-- Selecciona "Configuration file" y apunta a `apprunner.yaml`.
+- Selecciona "Configuration file" y apunta al archivo correspondiente (backend: `apprunner.yaml`, frontend: `frontend/apprunner.yaml`).
 - Despliega el último commit y verifica los logs.
 
 ### Variables de entorno necesarias en App Runner
