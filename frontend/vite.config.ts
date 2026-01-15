@@ -16,10 +16,7 @@ export default defineConfig(({ mode }) => {
     preview: {
       host: '0.0.0.0',
       port: 8080,
-      allowedHosts: [
-        'qhvhdjmggmd.us-east-1.awsapprunner.com',
-        'systemsf ae.net'.replace(/\s+/g, '')
-      ]
+      allowedHosts: true
     },
     plugins: [react()],
     define: {
