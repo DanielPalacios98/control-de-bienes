@@ -3,8 +3,8 @@ runtime: nodejs18
 build:
   commands:
     pre-build:
-      - cd backend && npm ci
+      - bash -c "cd backend && npm ci"
     build:
-      - cd backend && npm run build
+      - bash -c "cd backend && npm run build"
 run:
-  command: "cd backend && npm run start:prod"
+  command: 'bash -c "cd backend && npm run start:prod"'
