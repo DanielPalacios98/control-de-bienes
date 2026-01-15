@@ -6,4 +6,4 @@ build:
     - npm ci
     - npm run build
 start:
-  command: "cd backend && npm run start"
+  command: "cd backend && npm run start:prod"
