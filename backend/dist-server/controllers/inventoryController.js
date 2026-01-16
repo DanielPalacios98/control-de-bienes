@@ -3,8 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getNextInventoryId = exports.deleteEquipment = exports.updateEquipment = exports.createEquipment = exports.getEquipmentById = exports.getEquipment = void 0;
+exports.registerOutcome = exports.registerIncome = exports.deleteEquipment = exports.updateEquipment = exports.createEquipment = exports.getEquipmentById = exports.getEquipment = void 0;
 const Equipment_1 = __importDefault(require("../models/Equipment"));
+const equipmentService_1 = require("../services/equipmentService");
+/**
+ * Controlador de Inventario - Sistema de Excel Bodega de Equipo y Vestuario
+ */
 // Get all equipment for a user's branch
 const getEquipment = async (req, res) => {
     try {
@@ -15,7 +19,7 @@ const getEquipment = async (req, res) => {
             : { branchId: user.branchId };
         const equipment = await Equipment_1.default.find(query)
             .populate('branchId', 'name location')
-            .sort({ createdAt: -1 });
+            .sort({ tipo: 1, ord: 1 }); // Ordenar por TIPO y luego por ORD
         res.json(equipment);
     }
     catch (error) {
@@ -46,10 +50,18 @@ const createEquipment = async (req, res) => {
     try {
         // @ts-ignore
         const user = req.user;
+        // Validar que las cantidades sean no-negativas
+        const { materialServible = 0, materialCaducado = 0, materialPrestado = 0 } = req.body;
+        if (materialServible < 0 || materialCaducado < 0 || materialPrestado < 0) {
+            res.status(400).json({ message: 'Las cantidades no pueden ser negativas' });
+            return;
+        }
         const equipmentData = {
             ...req.body,
             branchId: user.role === 'SUPER_ADMIN' ? req.body.branchId : user.branchId,
-            currentResponsibleId: req.body.currentResponsibleId || user._id
+            materialServible,
+            materialCaducado,
+            materialPrestado
         };
         const equipment = await Equipment_1.default.create(equipmentData);
         // Populate before returning
@@ -68,6 +80,14 @@ exports.createEquipment = createEquipment;
 // Update equipment
 const updateEquipment = async (req, res) => {
     try {
+        // Validar que las cantidades sean no-negativas si se están actualizando
+        const { materialServible, materialCaducado, materialPrestado } = req.body;
+        if ((materialServible !== undefined && materialServible < 0) ||
+            (materialCaducado !== undefined && materialCaducado < 0) ||
+            (materialPrestado !== undefined && materialPrestado < 0)) {
+            res.status(400).json({ message: 'Las cantidades no pueden ser negativas' });
+            return;
+        }
         const equipment = await Equipment_1.default.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
             .populate('branchId', 'name location');
         if (!equipment) {
@@ -101,42 +121,88 @@ const deleteEquipment = async (req, res) => {
     }
 };
 exports.deleteEquipment = deleteEquipment;
-// Get next available sequential ID for a prefix
-const getNextInventoryId = async (req, res) => {
+/**
+ * Registrar un ingreso de material
+ * Incrementa materialServible o materialCaducado según corresponda
+ */
+const registerIncome = async (req, res) => {
     try {
-        const { prefix } = req.query;
-        if (!prefix || typeof prefix !== 'string') {
-            res.status(400).json({ message: 'El prefijo es requerido' });
+        const { equipmentId, cantidad, tipo } = req.body; // tipo: 'servible' o 'caducado'
+        if (!equipmentId || !cantidad || cantidad <= 0) {
+            res.status(400).json({ message: 'Datos inválidos para el ingreso' });
             return;
         }
-        // Buscar todos los equipos con este prefijo
-        const equipment = await Equipment_1.default.find({
-            inventoryId: { $regex: `^${prefix}-`, $options: 'i' },
-            hasIndividualId: true
-        }).select('inventoryId');
-        // Extraer números de los IDs
-        const numbers = equipment
-            .map(item => {
-            const parts = item.inventoryId?.split('-') || [];
-            const lastPart = parts[parts.length - 1];
-            return parseInt(lastPart) || 0;
-        })
-            .filter(num => !isNaN(num));
-        // Obtener el siguiente número
-        const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
-        const nextNum = maxNum + 1;
-        // Formatear con padding de 4 dígitos
-        const nextId = `${prefix}-${String(nextNum).padStart(4, '0')}`;
+        const equipment = await Equipment_1.default.findById(equipmentId);
+        if (!equipment) {
+            res.status(404).json({ message: 'Equipo no encontrado' });
+            return;
+        }
+        // Actualizar según el tipo
+        if (tipo === 'caducado') {
+            equipment.materialCaducado += cantidad;
+        }
+        else {
+            equipment.materialServible += cantidad;
+        }
+        await equipment.save();
+        await equipment.populate('branchId', 'name location');
         res.json({
-            prefix,
-            nextId,
-            lastNumber: maxNum,
-            nextNumber: nextNum
+            message: 'Ingreso registrado correctamente',
+            equipment
         });
     }
     catch (error) {
-        console.error('Error getting next inventory ID:', error);
-        res.status(500).json({ message: 'Error al obtener el siguiente ID' });
+        console.error('Error registering income:', error);
+        res.status(500).json({ message: 'Error al registrar el ingreso' });
     }
 };
-exports.getNextInventoryId = getNextInventoryId;
+exports.registerIncome = registerIncome;
+/**
+ * Registrar un egreso de material
+ * Decrementa materialServible y incrementa materialPrestado
+ */
+const registerOutcome = async (req, res) => {
+    try {
+        // @ts-ignore
+        const user = req.user;
+        const { equipmentId, cantidad, responsibleName, responsibleIdentification, responsibleArea, custodianId, observacion } = req.body;
+        // Validaciones
+        if (!equipmentId || !cantidad || cantidad <= 0) {
+            res.status(400).json({ message: 'Equipo y cantidad son requeridos' });
+            return;
+        }
+        if (!responsibleName) {
+            res.status(400).json({ message: 'El nombre del responsable es requerido' });
+            return;
+        }
+        if (!custodianId) {
+            res.status(400).json({ message: 'El custodio es requerido' });
+            return;
+        }
+        const result = await (0, equipmentService_1.processOutcome)({
+            equipmentId,
+            cantidad,
+            responsibleName,
+            responsibleIdentification,
+            responsibleArea,
+            custodianId,
+            performedById: user._id,
+            branchId: user.branchId,
+            observacion
+        });
+        const equipment = await Equipment_1.default.findById(equipmentId)
+            .populate('branchId', 'name location')
+            .populate('custodianId', 'name rank');
+        res.json({
+            message: result.message,
+            equipment
+        });
+    }
+    catch (error) {
+        console.error('Error registering outcome:', error);
+        res.status(400).json({
+            message: error.message || 'Error al registrar el egreso'
+        });
+    }
+};
+exports.registerOutcome = registerOutcome;

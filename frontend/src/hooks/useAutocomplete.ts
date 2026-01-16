@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Equipment } from '../types';
-import { inventoryAPI } from '../services/api';
 
 interface AutocompleteCache {
   descriptions: string[];
-  prefixes: string[];
+  tipos: string[];
   lastUsedUnit: { [description: string]: string };
-  lastUsedCondition: { [description: string]: string };
+  lastUsedTipo: { [description: string]: string };
 }
 
 const CACHE_KEY = 'equipment_autocomplete_cache';
@@ -16,90 +15,55 @@ export const useAutocomplete = (inventory: Equipment[]) => {
     const stored = localStorage.getItem(CACHE_KEY);
     return stored ? JSON.parse(stored) : {
       descriptions: [],
-      prefixes: [],
+      tipos: [],
       lastUsedUnit: {},
-      lastUsedCondition: {}
+      lastUsedTipo: {}
     };
   });
 
   // Actualizar cache cuando cambia el inventario
   useEffect(() => {
     const descriptions = new Set<string>();
-    const prefixes = new Set<string>();
+    const tipos = new Set<string>();
     const lastUsedUnit: { [key: string]: string } = {};
-    const lastUsedCondition: { [key: string]: string } = {};
+    const lastUsedTipo: { [key: string]: string } = {};
 
     inventory.forEach(item => {
-      // Agregar descripción
+      // Agregar descripción y tipo
       descriptions.add(item.description);
+      tipos.add(item.tipo);
 
-      // Extraer prefijo del inventoryId si existe
-      if (item.inventoryId) {
-        const parts = item.inventoryId.split('-');
-        if (parts.length > 0) {
-          prefixes.add(parts[0]);
-        }
-      }
-
-      // Guardar última unidad y condición usada para cada descripción
+      // Guardar última unidad y tipo usados para cada descripción
       lastUsedUnit[item.description] = item.unit;
-      lastUsedCondition[item.description] = item.condition;
+      lastUsedTipo[item.description] = item.tipo;
     });
 
     const newCache = {
       descriptions: Array.from(descriptions).sort(),
-      prefixes: Array.from(prefixes).sort(),
+      tipos: Array.from(tipos).sort(),
       lastUsedUnit,
-      lastUsedCondition
+      lastUsedTipo
     };
 
     setCache(newCache);
     localStorage.setItem(CACHE_KEY, JSON.stringify(newCache));
   }, [inventory]);
 
-  const getSuggestions = (input: string, field: 'description' | 'prefix'): string[] => {
+  const getSuggestions = (input: string, field: 'description' | 'tipo'): string[] => {
     if (!input) return [];
     
     const normalized = input.toLowerCase().trim();
-    const list = field === 'description' ? cache.descriptions : cache.prefixes;
+    const list = field === 'description' ? cache.descriptions : cache.tipos;
     
     return list
       .filter(item => item.toLowerCase().includes(normalized))
       .slice(0, 5); // Limitar a 5 sugerencias
   };
 
-  const getNextSequentialId = (prefix: string): string => {
-    const matching = inventory
-      .filter(item => item.inventoryId?.startsWith(prefix))
-      .map(item => {
-        const parts = item.inventoryId?.split('-') || [];
-        const lastPart = parts[parts.length - 1];
-        return parseInt(lastPart) || 0;
-      })
-      .filter(num => !isNaN(num));
-
-    const maxNum = matching.length > 0 ? Math.max(...matching) : 0;
-    const nextNum = maxNum + 1;
-    
-    return `${prefix}-${String(nextNum).padStart(4, '0')}`;
-  };
-
-  // Obtener próximo ID desde el backend (más confiable en escenarios concurrentes)
-  const getNextSequentialIdFromServer = async (prefix: string): Promise<string> => {
-    try {
-      const result = await inventoryAPI.getNextId(prefix);
-      return result.nextId;
-    } catch (error) {
-      console.error('Error obteniendo próximo ID del servidor, usando fallback local:', error);
-      // Fallback a la generación local si falla el servidor
-      return getNextSequentialId(prefix);
-    }
-  };
-
   const getContextualDefaults = (description: string) => {
     return {
-      unit: cache.lastUsedUnit[description] || 'UN',
-      condition: cache.lastUsedCondition[description] || 'Servible'
+      unit: cache.lastUsedUnit[description] || 'EA',
+      tipo: cache.lastUsedTipo[description] || ''
     };
   };
 
@@ -107,16 +71,14 @@ export const useAutocomplete = (inventory: Equipment[]) => {
     localStorage.removeItem(CACHE_KEY);
     setCache({
       descriptions: [],
-      prefixes: [],
+      tipos: [],
       lastUsedUnit: {},
-      lastUsedCondition: {}
+      lastUsedTipo: {}
     });
   };
 
   return {
     getSuggestions,
-    getNextSequentialId,
-    getNextSequentialIdFromServer,
     getContextualDefaults,
     cache,
     clearCache

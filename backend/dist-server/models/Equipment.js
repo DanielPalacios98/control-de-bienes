@@ -33,41 +33,37 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EquipmentStatus = exports.EquipmentCondition = exports.LocationType = exports.UnitType = void 0;
+exports.UnitType = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
+/**
+ * Modelo de Equipment alineado con la estructura de Excel
+ * Inventario de Existencias de la Bodega de Equipo y Vestuario
+ */
 var UnitType;
 (function (UnitType) {
-    UnitType["UNIDAD"] = "UN";
-    UnitType["CUARTO"] = "QT";
-    UnitType["ROLLO"] = "RL";
-    UnitType["PAR"] = "PR";
-    UnitType["GALON"] = "GL";
+    UnitType["EA"] = "EA";
+    UnitType["UN"] = "UN";
+    UnitType["QT"] = "QT";
+    UnitType["RL"] = "RL";
+    UnitType["PR"] = "PR";
+    UnitType["GL"] = "GL"; // Galón
 })(UnitType || (exports.UnitType = UnitType = {}));
-var LocationType;
-(function (LocationType) {
-    LocationType["BODEGA"] = "BODEGA";
-    LocationType["EN_USO"] = "EN USO";
-})(LocationType || (exports.LocationType = LocationType = {}));
-var EquipmentCondition;
-(function (EquipmentCondition) {
-    EquipmentCondition["SERVIBLE"] = "Servible";
-    EquipmentCondition["CONDENADO"] = "Condenado";
-})(EquipmentCondition || (exports.EquipmentCondition = EquipmentCondition = {}));
-var EquipmentStatus;
-(function (EquipmentStatus) {
-    EquipmentStatus["AVAILABLE"] = "Disponible";
-    EquipmentStatus["IN_USE"] = "En Uso";
-    EquipmentStatus["MAINTENANCE"] = "Mantenimiento";
-    EquipmentStatus["RETIRED"] = "Retirado";
-})(EquipmentStatus || (exports.EquipmentStatus = EquipmentStatus = {}));
 const EquipmentSchema = new mongoose_1.Schema({
-    inventoryId: {
-        type: String,
-        trim: true
-    },
-    hasIndividualId: {
+    esigeft: {
         type: Boolean,
-        required: [true, 'Debe especificar si tiene ID individual']
+        required: true,
+        default: false
+    },
+    esbye: {
+        type: Boolean,
+        required: true,
+        default: false
+    },
+    tipo: {
+        type: String,
+        required: [true, 'El tipo de equipo es requerido'],
+        trim: true,
+        // Ejemplos: "Equipo de Protección Balístico", "Equipo Antimotines y Disturbios"
     },
     description: {
         type: String,
@@ -81,52 +77,46 @@ const EquipmentSchema = new mongoose_1.Schema({
             values: Object.values(UnitType),
             message: 'Unidad no válida'
         },
-        required: [true, 'La unidad es requerida']
+        required: [true, 'La unidad es requerida'],
+        default: 'EA'
     },
-    condition: {
+    materialServible: {
+        type: Number,
+        required: [true, 'Material servible es requerido'],
+        min: [0, 'Material servible no puede ser negativo'],
+        default: 0
+    },
+    materialCaducado: {
+        type: Number,
+        required: [true, 'Material caducado es requerido'],
+        min: [0, 'Material caducado no puede ser negativo'],
+        default: 0
+    },
+    materialPrestado: {
+        type: Number,
+        required: [true, 'Material prestado es requerido'],
+        min: [0, 'Material prestado no puede ser negativo'],
+        default: 0
+    },
+    observacion: {
         type: String,
-        enum: {
-            values: Object.values(EquipmentCondition),
-            message: 'Condición no válida'
-        },
-        required: [true, 'La condición es requerida']
+        trim: true,
+        default: ''
     },
-    status: {
-        type: String,
-        enum: {
-            values: Object.values(EquipmentStatus),
-            message: 'Estado no válido'
-        },
-        required: [true, 'El estado es requerido']
-    },
-    locationType: {
-        type: String,
-        enum: {
-            values: Object.values(LocationType),
-            message: 'Tipo de ubicación no válida'
-        },
-        required: [true, 'El tipo de ubicación es requerido']
-    },
-    entryDate: {
-        type: Date,
-        required: [true, 'La fecha de ingreso es requerida'],
-        default: Date.now
-    },
-    currentResponsibleId: {
-        type: String,
-        required: [true, 'El responsable es requerido'],
-        trim: true
+    custodianId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Custodian',
+        required: [true, 'El custodio es requerido']
     },
     branchId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Branch',
         required: [true, 'La sucursal es requerida']
     },
-    stock: {
-        type: Number,
-        required: [true, 'El stock es requerido'],
-        min: [0, 'El stock no puede ser negativo'],
-        default: 1
+    entryDate: {
+        type: Date,
+        required: [true, 'La fecha de ingreso es requerida'],
+        default: Date.now
     }
 }, {
     timestamps: true,
@@ -134,24 +124,15 @@ const EquipmentSchema = new mongoose_1.Schema({
     toObject: { virtuals: true },
     collection: 'equipment'
 });
-// Validación personalizada: inventoryId requerido para items individuales
-EquipmentSchema.pre('save', async function (next) {
-    if (this.hasIndividualId && !this.inventoryId) {
-        return next(new Error('El ID de inventario es requerido para items individuales'));
-    }
-    // Validar que el inventoryId sea único para items individuales
-    if (this.hasIndividualId && this.inventoryId && this.isNew) {
-        const existingItem = await mongoose_1.default.model('Equipment').findOne({
-            inventoryId: this.inventoryId,
-            hasIndividualId: true
-        });
-        if (existingItem) {
-            return next(new Error(`El ID de inventario "${this.inventoryId}" ya existe`));
-        }
-    }
-    next();
+// Virtual: TOTAL EN BODEGA = materialServible + materialCaducado
+EquipmentSchema.virtual('totalEnBodega').get(function () {
+    return this.materialServible + this.materialCaducado;
 });
-// Nota: currentResponsible virtual eliminado porque currentResponsibleId ahora es un string (cédula)
+// Virtual: TOTAL = totalEnBodega + materialPrestado
+EquipmentSchema.virtual('total').get(function () {
+    const totalBodega = this.materialServible + this.materialCaducado;
+    return totalBodega + this.materialPrestado;
+});
 // Virtual para obtener datos de la sucursal
 EquipmentSchema.virtual('branch', {
     ref: 'Branch',
@@ -159,8 +140,14 @@ EquipmentSchema.virtual('branch', {
     foreignField: '_id',
     justOne: true
 });
+// Virtual para obtener datos del custodio
+EquipmentSchema.virtual('custodian', {
+    ref: 'Custodian',
+    localField: 'custodianId',
+    foreignField: '_id',
+    justOne: true
+});
 // Índices para búsquedas rápidas
-EquipmentSchema.index({ branchId: 1, status: 1 });
+EquipmentSchema.index({ branchId: 1, tipo: 1 });
 EquipmentSchema.index({ description: 'text' });
-EquipmentSchema.index({ inventoryId: 1 });
 exports.default = mongoose_1.default.model('Equipment', EquipmentSchema);

@@ -5,9 +5,9 @@ import {
     createEquipment,
     updateEquipment,
     deleteEquipment,
-    getNextInventoryId
+    registerIncome,
+    registerOutcome
 } from '../controllers/inventoryController';
-import { exitEquipment } from '../controllers/exitController';
 import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -19,9 +19,9 @@ router.route('/')
     .get(getEquipment)
     .post(createEquipment);
 
-router.get('/next-id', getNextInventoryId);
-
-router.post('/exit', exitEquipment);
+// Registrar ingresos y egresos
+router.post('/income', registerIncome);
+router.post('/outcome', registerOutcome);
 
 router.route('/:id')
     .get(getEquipmentById)

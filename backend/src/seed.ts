@@ -4,6 +4,7 @@ import User, { UserRole } from './models/User';
 import Branch from './models/Branch';
 import Equipment from './models/Equipment';
 import Movement from './models/Movement';
+import Custodian from './models/Custodian';
 import connectDB from './db';
 
 dotenv.config();
@@ -19,6 +20,7 @@ const seedDB = async () => {
         await Branch.deleteMany({});
         await Equipment.deleteMany({});
         await Movement.deleteMany({});
+        await Custodian.deleteMany({});
         console.log('✅ Datos anteriores eliminados');
 
         // 2. Crear única sucursal operativa primero
@@ -44,6 +46,21 @@ const seedDB = async () => {
         branch.managerId = admin._id;
         await branch.save();
         console.log(`✅ Sucursal actualizada con managerId correcto`);
+
+        // 5. Crear custodio por defecto (Cbos. Rios Siulin)
+        const custodian = await Custodian.create({
+            name: 'Cbos. Rios Siulin',
+            rank: 'Cabo Segundo',
+            identification: '0123456789',
+            area: 'Bodega de Equipo y Vestuario',
+            isActive: true,
+            isDefault: true
+        });
+        console.log(`✅ Custodio por defecto creado: ${custodian.name}`);
+
+        // 6. NO crear equipos de ejemplo - El usuario los agregará manualmente
+        console.log('📝 Base de datos inicializada sin equipos de ejemplo');
+        console.log('📝 Puede comenzar a agregar equipos desde la interfaz');
 
         console.log('\n🎉 Seed completado exitosamente!');
         console.log('\n📋 Credenciales de acceso:');

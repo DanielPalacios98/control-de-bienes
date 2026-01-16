@@ -1,92 +1,151 @@
 import mongoose from 'mongoose';
 import Equipment from '../models/Equipment';
 import Movement from '../models/Movement';
+import LoanRecord from '../models/LoanRecord';
 import { MovementType } from '../models/Movement';
 
-interface ExitEquipmentParams {
+/**
+ * Servicio para manejar ingresos y egresos del sistema de inventario Excel
+ */
+
+interface RegisterIncomeParams {
     equipmentId: string;
-    quantity: number;
-    responsibleId: string;
+    cantidad: number;
+    tipo: 'servible' | 'caducado';
     performedById: string;
     branchId: string;
-    reason?: string;
+    observacion?: string;
+}
+
+interface RegisterOutcomeParams {
+    equipmentId: string;
+    cantidad: number;
+    responsibleName: string;
+    responsibleIdentification?: string;
+    responsibleArea?: string;
+    custodianId: string;
+    performedById: string;
+    branchId: string;
+    observacion?: string;
 }
 
 /**
- * Procesa un egreso de equipo usando transacciones para garantizar consistencia
+ * Registra un ingreso de material
  */
-export const processEquipmentExit = async (params: ExitEquipmentParams) => {
+export const processIncome = async (params: RegisterIncomeParams) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        const { equipmentId, quantity, responsibleId, performedById, branchId, reason } = params;
+        const { equipmentId, cantidad, tipo, performedById, branchId, observacion } = params;
 
-        // 1. Obtener el equipo
         const equipment = await Equipment.findById(equipmentId).session(session);
         if (!equipment) {
             throw new Error('Equipo no encontrado');
         }
 
-        // 2. Validar stock
-        if (equipment.stock < quantity) {
-            throw new Error(`Stock insuficiente. Disponible: ${equipment.stock}, Solicitado: ${quantity}`);
-        }
-
-        // 3. Actualizar o eliminar equipo de bodega
-        const newStock = equipment.stock - quantity;
-        if (newStock > 0) {
-            equipment.stock = newStock;
-            await equipment.save({ session });
+        // Actualizar cantidades según el tipo
+        if (tipo === 'caducado') {
+            equipment.materialCaducado += cantidad;
         } else {
-            await Equipment.findByIdAndDelete(equipmentId).session(session);
+            equipment.materialServible += cantidad;
         }
 
-        // 4. Buscar o crear equipo "en uso"
-        let inUseEquipment = await Equipment.findOne({
-            description: equipment.description,
-            currentResponsibleId: responsibleId,
-            locationType: 'EN USO',
-            hasIndividualId: false
-        }).session(session);
-
-        if (inUseEquipment) {
-            // Actualizar existente
-            inUseEquipment.stock += quantity;
-            await inUseEquipment.save({ session });
-        } else {
-            // Crear nuevo
-            const newEquipment = await Equipment.create([{
-                hasIndividualId: false,
-                description: equipment.description,
-                unit: equipment.unit,
-                condition: equipment.condition,
-                status: 'En Uso',
-                locationType: 'EN USO',
-                entryDate: equipment.entryDate,
-                currentResponsibleId: responsibleId,
-                branchId: branchId,
-                stock: quantity
-            }], { session });
-            inUseEquipment = newEquipment[0];
+        if (observacion) {
+            equipment.observacion = observacion;
         }
 
-        // 5. Crear registro de movimiento
+        await equipment.save({ session });
+
+        // Crear registro de movimiento
         await Movement.create([{
             equipmentId: equipmentId,
-            type: MovementType.OUT,
-            quantity: quantity,
-            responsibleId: responsibleId,
+            type: MovementType.IN,
+            quantity: cantidad,
+            responsibleId: performedById,
             performedById: performedById,
             branchId: branchId,
             timestamp: new Date(),
-            reason: reason
+            reason: `Ingreso de material ${tipo}`
         }], { session });
 
-        // 6. Commit de la transacción
         await session.commitTransaction();
 
-        return { success: true, message: 'Egreso procesado correctamente' };
+        return { success: true, message: 'Ingreso procesado correctamente', equipment };
+    } catch (error) {
+        await session.abortTransaction();
+        throw error;
+    } finally {
+        session.endSession();
+    }
+};
+
+/**
+ * Registra un egreso de material (dotación/préstamo)
+ */
+export const processOutcome = async (params: RegisterOutcomeParams) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { 
+            equipmentId, 
+            cantidad, 
+            responsibleName,
+            responsibleIdentification,
+            responsibleArea,
+            custodianId,
+            performedById, 
+            branchId, 
+            observacion 
+        } = params;
+
+        const equipment = await Equipment.findById(equipmentId).session(session);
+        if (!equipment) {
+            throw new Error('Equipo no encontrado');
+        }
+
+        // Validar que haya suficiente material servible
+        if (equipment.materialServible < cantidad) {
+            throw new Error(`Stock insuficiente. Disponible: ${equipment.materialServible}, Solicitado: ${cantidad}`);
+        }
+
+        // Decrementar servible e incrementar prestado
+        equipment.materialServible -= cantidad;
+        equipment.materialPrestado += cantidad;
+
+        await equipment.save({ session });
+
+        // Crear registro de préstamo
+        await LoanRecord.create([{
+            equipmentId: equipmentId,
+            cantidad: cantidad,
+            responsibleName: responsibleName,
+            responsibleIdentification: responsibleIdentification,
+            responsibleArea: responsibleArea,
+            custodianId: custodianId,
+            performedById: performedById,
+            branchId: branchId,
+            loanDate: new Date(),
+            status: 'prestado',
+            observacion: observacion
+        }], { session });
+
+        // Crear registro de movimiento
+        await Movement.create([{
+            equipmentId: equipmentId,
+            type: MovementType.OUT,
+            quantity: cantidad,
+            responsibleId: performedById,
+            performedById: performedById,
+            branchId: branchId,
+            timestamp: new Date(),
+            reason: `Egreso a: ${responsibleName}`
+        }], { session });
+
+        await session.commitTransaction();
+
+        return { success: true, message: 'Egreso procesado correctamente', equipment };
     } catch (error) {
         await session.abortTransaction();
         throw error;

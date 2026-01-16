@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import Dashboard from './components/Dashboard';
+import DashboardExcel from './components/DashboardExcel';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import { User, UserRole } from './types';
@@ -145,7 +145,7 @@ const App: React.FC = () => {
       {/* Contenido Principal - Con su propio scroll independiente */}
       <main className="flex-1 h-full overflow-y-auto bg-gray-50 custom-scrollbar relative pt-16 md:pt-0">
         <div className="pb-12"> {/* Espaciado final para que el contenido no pegue al borde */}
-          {activeTab === 'inventory' && <Dashboard user={currentUser} />}
+          {activeTab === 'inventory' && <DashboardExcel user={currentUser} />}
           {activeTab === 'users' && currentUser.role === UserRole.SUPER_ADMIN && <UserManagement />}
           {activeTab === 'audit' && (
             <div className="p-8 text-center text-gray-500 min-h-[60vh] flex flex-col items-center justify-center">

@@ -20,12 +20,16 @@ import authRoutes from './routes/authRoutes';
 import inventoryRoutes from './routes/inventoryRoutes';
 import movementRoutes from './routes/movementRoutes';
 import branchRoutes from './routes/branchRoutes';
+import custodianRoutes from './routes/custodianRoutes';
+import loanRecordRoutes from './routes/loanRecordRoutes';
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/movements', movementRoutes);
 app.use('/api/branches', branchRoutes);
+app.use('/api/custodians', custodianRoutes);
+app.use('/api/loan-records', loanRecordRoutes);
 
 app.get('/', (req, res) => {
     res.send('API Control de Bienes FAE is running');

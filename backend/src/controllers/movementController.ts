@@ -12,7 +12,7 @@ export const getMovements = async (req: Request, res: Response): Promise<void> =
             : { branchId: user.branchId };
 
         const movements = await Movement.find(query)
-            .populate('equipmentId', 'description inventoryId')
+            .populate('equipmentId', 'description tipo')
             .populate('responsibleId', 'name email')
             .populate('performedById', 'name email')
             .populate('branchId', 'name')
@@ -41,7 +41,7 @@ export const createMovement = async (req: Request, res: Response): Promise<void>
         const movement = await Movement.create(movementData);
 
         // Populate before returning
-        await movement.populate('equipmentId', 'description inventoryId');
+        await movement.populate('equipmentId', 'description tipo');
         await movement.populate('responsibleId', 'name email');
         await movement.populate('performedById', 'name email');
         await movement.populate('branchId', 'name');

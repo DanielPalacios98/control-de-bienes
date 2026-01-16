@@ -2,19 +2,6 @@ import { Equipment } from '../types';
 import { EquipmentResponse } from './api';
 
 export const convertToEquipment = (apiEquipment: EquipmentResponse): Equipment => {
-    // Extract IDs and names from populated fields safely
-    const currentResponsibleId = apiEquipment.currentResponsibleId
-        ? (typeof apiEquipment.currentResponsibleId === 'string'
-            ? apiEquipment.currentResponsibleId
-            : apiEquipment.currentResponsibleId._id)
-        : '';
-
-    const currentResponsibleName = apiEquipment.currentResponsibleId
-        ? (typeof apiEquipment.currentResponsibleId === 'string'
-            ? 'Unknown'
-            : apiEquipment.currentResponsibleId.name)
-        : 'Unknown';
-
     const branchId = apiEquipment.branchId
         ? (typeof apiEquipment.branchId === 'string'
             ? apiEquipment.branchId
@@ -23,33 +10,35 @@ export const convertToEquipment = (apiEquipment: EquipmentResponse): Equipment =
 
     return {
         id: apiEquipment._id,
-        inventoryId: apiEquipment.inventoryId,
-        hasIndividualId: apiEquipment.hasIndividualId,
+        ord: apiEquipment.ord,
+        esigeft: apiEquipment.esigeft,
+        esbye: apiEquipment.esbye,
+        tipo: apiEquipment.tipo,
         description: apiEquipment.description,
         unit: apiEquipment.unit as any,
-        condition: apiEquipment.condition as any,
-        status: apiEquipment.status as any,
-        locationType: apiEquipment.locationType as any,
-        entryDate: apiEquipment.entryDate,
-        currentResponsibleId: currentResponsibleId,
-        currentResponsibleName: currentResponsibleName,
+        materialServible: apiEquipment.materialServible,
+        materialCaducado: apiEquipment.materialCaducado,
+        materialPrestado: apiEquipment.materialPrestado,
+        totalEnBodega: apiEquipment.totalEnBodega,
+        total: apiEquipment.total,
+        observacion: apiEquipment.observacion,
         branchId: branchId,
-        stock: apiEquipment.stock
+        entryDate: apiEquipment.entryDate
     };
 };
 
 export const convertFromEquipment = (equipment: Partial<Equipment>): Partial<EquipmentResponse> => {
     return {
-        inventoryId: equipment.inventoryId,
-        hasIndividualId: equipment.hasIndividualId,
+        esigeft: equipment.esigeft,
+        esbye: equipment.esbye,
+        tipo: equipment.tipo,
         description: equipment.description,
         unit: equipment.unit,
-        condition: equipment.condition,
-        status: equipment.status,
-        locationType: equipment.locationType,
-        entryDate: equipment.entryDate,
-        currentResponsibleId: equipment.currentResponsibleId,
+        materialServible: equipment.materialServible,
+        materialCaducado: equipment.materialCaducado,
+        materialPrestado: equipment.materialPrestado,
+        observacion: equipment.observacion,
         branchId: equipment.branchId,
-        stock: equipment.stock
+        entryDate: equipment.entryDate
     };
 };

@@ -1,15 +1,36 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole, Branch } from '../types';
-import { mockBranches, initialUsers } from '../services/mockData';
+import { branchAPI } from '../services/api';
 
 const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newUser, setNewUser] = useState<Partial<User>>({
     role: UserRole.BRANCH_ADMIN,
     status: 'active'
   });
+
+  // Cargar branches desde el API
+  useEffect(() => {
+    const loadBranches = async () => {
+      try {
+        const branchesData = await branchAPI.getAll();
+        const mappedBranches: Branch[] = branchesData.map(b => ({
+          id: b._id,
+          name: b.name,
+          location: b.location,
+          managerId: typeof b.managerId === 'string' ? b.managerId : b.managerId._id,
+          managerName: typeof b.managerId === 'string' ? '' : b.managerId.name
+        }));
+        setBranches(mappedBranches);
+      } catch (error) {
+        console.error('Error cargando bodegas:', error);
+      }
+    };
+    loadBranches();
+  }, []);
 
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +81,7 @@ const UserManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm font-semibold text-gray-500">
-                  {u.branchId ? mockBranches.find(b => b.id === u.branchId)?.name.split('Ala').pop() : 'TOTAL'}
+                  {u.branchId ? branches.find(b => b.id === u.branchId)?.name || 'N/A' : 'TOTAL'}
                 </td>
                 <td className="px-6 py-4">
                   <span className="flex items-center gap-1.5 text-[10px] text-green-600 font-extrabold uppercase">
@@ -93,7 +114,7 @@ const UserManagement: React.FC = () => {
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Sucursal / Bodega</label>
                 <select className={inputClasses} onChange={e => setNewUser({...newUser, branchId: e.target.value})}>
                   <option value="">Seleccione asignación...</option>
-                  {mockBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div className="pt-6 flex justify-end gap-3 border-t">

@@ -14,7 +14,7 @@ const getMovements = async (req, res) => {
             ? {}
             : { branchId: user.branchId };
         const movements = await Movement_1.default.find(query)
-            .populate('equipmentId', 'description inventoryId')
+            .populate('equipmentId', 'description tipo')
             .populate('responsibleId', 'name email')
             .populate('performedById', 'name email')
             .populate('branchId', 'name')
@@ -40,7 +40,7 @@ const createMovement = async (req, res) => {
         };
         const movement = await Movement_1.default.create(movementData);
         // Populate before returning
-        await movement.populate('equipmentId', 'description inventoryId');
+        await movement.populate('equipmentId', 'description tipo');
         await movement.populate('responsibleId', 'name email');
         await movement.populate('performedById', 'name email');
         await movement.populate('branchId', 'name');
