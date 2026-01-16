@@ -19,34 +19,21 @@ const seedDB = async () => {
 
         // 2. Crear Super Admin
         const admin = await User.create({
-            name: 'Daniel Palacios',
+            name: 'Cbos. Rios Siulin',
             email: 'admin@fae.com',
             password: 'admin123',
             role: UserRole.SUPER_ADMIN,
             status: 'active'
         });
-        console.log(`✅ Admin creado: ${admin.email} / admin123`);
+        console.log(`✅ Super administradora creada: ${admin.name}`);
 
-        // 3. Crear Sucursales (Branches)
-        const branches = await Branch.create([
-            {
-                name: 'Armamento',
-                location: 'Base Aérea Mariscal Sucre',
-                managerId: admin._id
-            },
-            {
-                name: 'Intendencia',
-                location: 'Base Aérea Mariscal Sucre',
-                managerId: admin._id
-            },
-            {
-                name: 'Logística',
-                location: 'Base Aérea Mariscal Sucre',
-                managerId: admin._id
-            }
-        ]);
-        console.log(`✅ ${branches.length} sucursales creadas`);
-        branches.forEach(b => console.log(`   - ${b.name} (ID: ${b._id})`));
+        // 3. Crear única sucursal operativa
+        const branch = await Branch.create({
+            name: 'Bodega Equipo y Vestuario',
+            location: 'Base Aérea Simón Bolívar',
+            managerId: admin._id
+        });
+        console.log(`✅ Sucursal creada: ${branch.name} (ID: ${branch._id})`);
 
         console.log('\n🎉 Seed completado exitosamente!');
         console.log('\n📋 Credenciales de acceso:');
