@@ -12,7 +12,6 @@ export const getEquipment = async (req: Request, res: Response): Promise<void> =
             : { branchId: user.branchId };
 
         const equipment = await Equipment.find(query)
-            .populate('currentResponsibleId', 'name email')
             .populate('branchId', 'name location')
             .sort({ createdAt: -1 });
 
@@ -27,7 +26,6 @@ export const getEquipment = async (req: Request, res: Response): Promise<void> =
 export const getEquipmentById = async (req: Request, res: Response): Promise<void> => {
     try {
         const equipment = await Equipment.findById(req.params.id)
-            .populate('currentResponsibleId', 'name email')
             .populate('branchId', 'name location');
 
         if (!equipment) {
@@ -57,7 +55,6 @@ export const createEquipment = async (req: Request, res: Response): Promise<void
         const equipment = await Equipment.create(equipmentData);
 
         // Populate before returning
-        await equipment.populate('currentResponsibleId', 'name email');
         await equipment.populate('branchId', 'name location');
 
         res.status(201).json(equipment);
@@ -78,7 +75,6 @@ export const updateEquipment = async (req: Request, res: Response): Promise<void
             req.body,
             { new: true, runValidators: true }
         )
-            .populate('currentResponsibleId', 'name email')
             .populate('branchId', 'name location');
 
         if (!equipment) {
@@ -110,5 +106,49 @@ export const deleteEquipment = async (req: Request, res: Response): Promise<void
     } catch (error) {
         console.error('Error deleting equipment:', error);
         res.status(500).json({ message: 'Error al eliminar el equipo' });
+    }
+};
+
+// Get next available sequential ID for a prefix
+export const getNextInventoryId = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { prefix } = req.query;
+
+        if (!prefix || typeof prefix !== 'string') {
+            res.status(400).json({ message: 'El prefijo es requerido' });
+            return;
+        }
+
+        // Buscar todos los equipos con este prefijo
+        const equipment = await Equipment.find({
+            inventoryId: { $regex: `^${prefix}-`, $options: 'i' },
+            hasIndividualId: true
+        }).select('inventoryId');
+
+        // Extraer números de los IDs
+        const numbers = equipment
+            .map(item => {
+                const parts = item.inventoryId?.split('-') || [];
+                const lastPart = parts[parts.length - 1];
+                return parseInt(lastPart) || 0;
+            })
+            .filter(num => !isNaN(num));
+
+        // Obtener el siguiente número
+        const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
+        const nextNum = maxNum + 1;
+        
+        // Formatear con padding de 4 dígitos
+        const nextId = `${prefix}-${String(nextNum).padStart(4, '0')}`;
+
+        res.json({ 
+            prefix,
+            nextId,
+            lastNumber: maxNum,
+            nextNumber: nextNum
+        });
+    } catch (error) {
+        console.error('Error getting next inventory ID:', error);
+        res.status(500).json({ message: 'Error al obtener el siguiente ID' });
     }
 };

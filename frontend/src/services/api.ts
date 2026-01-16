@@ -72,6 +72,11 @@ export const inventoryAPI = {
         return response.data;
     },
 
+    getNextId: async (prefix: string): Promise<{ prefix: string; nextId: string; lastNumber: number; nextNumber: number }> => {
+        const response = await api.get(`/inventory/next-id?prefix=${encodeURIComponent(prefix)}`);
+        return response.data;
+    },
+
     create: async (data: Partial<EquipmentResponse>): Promise<EquipmentResponse> => {
         const response = await api.post<EquipmentResponse>('/inventory', data);
         return response.data;

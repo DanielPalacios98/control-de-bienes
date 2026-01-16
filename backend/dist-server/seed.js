@@ -36,9 +36,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const User_1 = __importStar(require("./models/User"));
 const Branch_1 = __importDefault(require("./models/Branch"));
+const Equipment_1 = __importDefault(require("./models/Equipment"));
+const Movement_1 = __importDefault(require("./models/Movement"));
 const db_1 = __importDefault(require("./db"));
 dotenv_1.default.config();
 const seedDB = async () => {
@@ -48,23 +51,30 @@ const seedDB = async () => {
         // 1. Limpiar datos existentes
         await User_1.default.deleteMany({});
         await Branch_1.default.deleteMany({});
+        await Equipment_1.default.deleteMany({});
+        await Movement_1.default.deleteMany({});
         console.log('✅ Datos anteriores eliminados');
-        // 2. Crear Super Admin
+        // 2. Crear única sucursal operativa primero
+        const branch = await Branch_1.default.create({
+            name: 'Bodega Equipo y Vestuario',
+            location: 'Base Aérea Simón Bolívar',
+            managerId: new mongoose_1.default.Types.ObjectId() // temporal
+        });
+        console.log(`✅ Sucursal creada: ${branch.name} (ID: ${branch._id})`);
+        // 3. Crear Super Admin con branchId
         const admin = await User_1.default.create({
             name: 'Cbos. Rios Siulin',
             email: 'admin@fae.com',
             password: 'admin123',
             role: User_1.UserRole.SUPER_ADMIN,
+            branchId: branch._id,
             status: 'active'
         });
         console.log(`✅ Super administradora creada: ${admin.name}`);
-        // 3. Crear única sucursal operativa
-        const branch = await Branch_1.default.create({
-            name: 'Bodega Equipo y Vestuario',
-            location: 'Base Aérea Simón Bolívar',
-            managerId: admin._id
-        });
-        console.log(`✅ Sucursal creada: ${branch.name} (ID: ${branch._id})`);
+        // 4. Actualizar sucursal con el managerId correcto
+        branch.managerId = admin._id;
+        await branch.save();
+        console.log(`✅ Sucursal actualizada con managerId correcto`);
         console.log('\n🎉 Seed completado exitosamente!');
         console.log('\n📋 Credenciales de acceso:');
         console.log(`   Email: ${admin.email}`);

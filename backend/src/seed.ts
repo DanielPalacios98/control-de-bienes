@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User, { UserRole } from './models/User';
 import Branch from './models/Branch';
+import Equipment from './models/Equipment';
+import Movement from './models/Movement';
 import connectDB from './db';
 
 dotenv.config();
@@ -15,25 +17,33 @@ const seedDB = async () => {
         // 1. Limpiar datos existentes
         await User.deleteMany({});
         await Branch.deleteMany({});
+        await Equipment.deleteMany({});
+        await Movement.deleteMany({});
         console.log('✅ Datos anteriores eliminados');
 
-        // 2. Crear Super Admin
+        // 2. Crear única sucursal operativa primero
+        const branch = await Branch.create({
+            name: 'Bodega Equipo y Vestuario',
+            location: 'Base Aérea Simón Bolívar',
+            managerId: new mongoose.Types.ObjectId() // temporal
+        });
+        console.log(`✅ Sucursal creada: ${branch.name} (ID: ${branch._id})`);
+
+        // 3. Crear Super Admin con branchId
         const admin = await User.create({
             name: 'Cbos. Rios Siulin',
             email: 'admin@fae.com',
             password: 'admin123',
             role: UserRole.SUPER_ADMIN,
+            branchId: branch._id,
             status: 'active'
         });
         console.log(`✅ Super administradora creada: ${admin.name}`);
 
-        // 3. Crear única sucursal operativa
-        const branch = await Branch.create({
-            name: 'Bodega Equipo y Vestuario',
-            location: 'Base Aérea Simón Bolívar',
-            managerId: admin._id
-        });
-        console.log(`✅ Sucursal creada: ${branch.name} (ID: ${branch._id})`);
+        // 4. Actualizar sucursal con el managerId correcto
+        branch.managerId = admin._id;
+        await branch.save();
+        console.log(`✅ Sucursal actualizada con managerId correcto`);
 
         console.log('\n🎉 Seed completado exitosamente!');
         console.log('\n📋 Credenciales de acceso:');

@@ -13,6 +13,7 @@ router.use(authMiddleware_1.protect);
 router.route('/')
     .get(inventoryController_1.getEquipment)
     .post(inventoryController_1.createEquipment);
+router.get('/next-id', inventoryController_1.getNextInventoryId);
 router.post('/exit', exitController_1.exitEquipment);
 router.route('/:id')
     .get(inventoryController_1.getEquipmentById)

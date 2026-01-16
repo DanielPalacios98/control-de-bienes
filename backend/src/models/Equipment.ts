@@ -34,7 +34,7 @@ export interface IEquipment extends Document {
     status: EquipmentStatus;
     locationType: LocationType;
     entryDate: Date;
-    currentResponsibleId: mongoose.Types.ObjectId;
+    currentResponsibleId: string; // Ahora es string (número de cédula)
     branchId: mongoose.Types.ObjectId;
     stock: number;
     // Virtual fields
@@ -95,9 +95,9 @@ const EquipmentSchema: Schema = new Schema({
         default: Date.now
     },
     currentResponsibleId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        required: [true, 'El responsable es requerido']
+        type: String,
+        required: [true, 'El responsable es requerido'],
+        trim: true
     },
     branchId: {
         type: Schema.Types.ObjectId,
@@ -118,20 +118,26 @@ const EquipmentSchema: Schema = new Schema({
 });
 
 // Validación personalizada: inventoryId requerido para items individuales
-EquipmentSchema.pre('save', function (next) {
+EquipmentSchema.pre('save', async function (next) {
     if (this.hasIndividualId && !this.inventoryId) {
         return next(new Error('El ID de inventario es requerido para items individuales'));
     }
+    
+    // Validar que el inventoryId sea único para items individuales
+    if (this.hasIndividualId && this.inventoryId && this.isNew) {
+        const existingItem = await mongoose.model('Equipment').findOne({ 
+            inventoryId: this.inventoryId,
+            hasIndividualId: true 
+        });
+        if (existingItem) {
+            return next(new Error(`El ID de inventario "${this.inventoryId}" ya existe`));
+        }
+    }
+    
     next();
 });
 
-// Virtual para obtener datos del responsable
-EquipmentSchema.virtual('currentResponsible', {
-    ref: 'User',
-    localField: 'currentResponsibleId',
-    foreignField: '_id',
-    justOne: true
-});
+// Nota: currentResponsible virtual eliminado porque currentResponsibleId ahora es un string (cédula)
 
 // Virtual para obtener datos de la sucursal
 EquipmentSchema.virtual('branch', {

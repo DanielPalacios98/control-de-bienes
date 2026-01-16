@@ -4,7 +4,8 @@ import {
     getEquipmentById,
     createEquipment,
     updateEquipment,
-    deleteEquipment
+    deleteEquipment,
+    getNextInventoryId
 } from '../controllers/inventoryController';
 import { exitEquipment } from '../controllers/exitController';
 import { protect } from '../middleware/authMiddleware';
@@ -17,6 +18,8 @@ router.use(protect);
 router.route('/')
     .get(getEquipment)
     .post(createEquipment);
+
+router.get('/next-id', getNextInventoryId);
 
 router.post('/exit', exitEquipment);
 

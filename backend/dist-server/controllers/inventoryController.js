@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteEquipment = exports.updateEquipment = exports.createEquipment = exports.getEquipmentById = exports.getEquipment = void 0;
+exports.getNextInventoryId = exports.deleteEquipment = exports.updateEquipment = exports.createEquipment = exports.getEquipmentById = exports.getEquipment = void 0;
 const Equipment_1 = __importDefault(require("../models/Equipment"));
 // Get all equipment for a user's branch
 const getEquipment = async (req, res) => {
@@ -14,7 +14,6 @@ const getEquipment = async (req, res) => {
             ? {}
             : { branchId: user.branchId };
         const equipment = await Equipment_1.default.find(query)
-            .populate('currentResponsibleId', 'name email')
             .populate('branchId', 'name location')
             .sort({ createdAt: -1 });
         res.json(equipment);
@@ -29,7 +28,6 @@ exports.getEquipment = getEquipment;
 const getEquipmentById = async (req, res) => {
     try {
         const equipment = await Equipment_1.default.findById(req.params.id)
-            .populate('currentResponsibleId', 'name email')
             .populate('branchId', 'name location');
         if (!equipment) {
             res.status(404).json({ message: 'Equipo no encontrado' });
@@ -55,7 +53,6 @@ const createEquipment = async (req, res) => {
         };
         const equipment = await Equipment_1.default.create(equipmentData);
         // Populate before returning
-        await equipment.populate('currentResponsibleId', 'name email');
         await equipment.populate('branchId', 'name location');
         res.status(201).json(equipment);
     }
@@ -72,7 +69,6 @@ exports.createEquipment = createEquipment;
 const updateEquipment = async (req, res) => {
     try {
         const equipment = await Equipment_1.default.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
-            .populate('currentResponsibleId', 'name email')
             .populate('branchId', 'name location');
         if (!equipment) {
             res.status(404).json({ message: 'Equipo no encontrado' });
@@ -105,3 +101,42 @@ const deleteEquipment = async (req, res) => {
     }
 };
 exports.deleteEquipment = deleteEquipment;
+// Get next available sequential ID for a prefix
+const getNextInventoryId = async (req, res) => {
+    try {
+        const { prefix } = req.query;
+        if (!prefix || typeof prefix !== 'string') {
+            res.status(400).json({ message: 'El prefijo es requerido' });
+            return;
+        }
+        // Buscar todos los equipos con este prefijo
+        const equipment = await Equipment_1.default.find({
+            inventoryId: { $regex: `^${prefix}-`, $options: 'i' },
+            hasIndividualId: true
+        }).select('inventoryId');
+        // Extraer números de los IDs
+        const numbers = equipment
+            .map(item => {
+            const parts = item.inventoryId?.split('-') || [];
+            const lastPart = parts[parts.length - 1];
+            return parseInt(lastPart) || 0;
+        })
+            .filter(num => !isNaN(num));
+        // Obtener el siguiente número
+        const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
+        const nextNum = maxNum + 1;
+        // Formatear con padding de 4 dígitos
+        const nextId = `${prefix}-${String(nextNum).padStart(4, '0')}`;
+        res.json({
+            prefix,
+            nextId,
+            lastNumber: maxNum,
+            nextNumber: nextNum
+        });
+    }
+    catch (error) {
+        console.error('Error getting next inventory ID:', error);
+        res.status(500).json({ message: 'Error al obtener el siguiente ID' });
+    }
+};
+exports.getNextInventoryId = getNextInventoryId;

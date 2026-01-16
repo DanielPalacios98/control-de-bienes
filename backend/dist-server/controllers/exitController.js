@@ -7,6 +7,12 @@ const exitEquipment = async (req, res) => {
         // @ts-ignore
         const user = req.user;
         const { equipmentId, quantity, responsibleId, reason } = req.body;
+        if (!user.branchId) {
+            res.status(400).json({
+                message: 'El usuario no tiene una sucursal asignada'
+            });
+            return;
+        }
         const result = await (0, equipmentService_1.processEquipmentExit)({
             equipmentId,
             quantity,

@@ -8,6 +8,13 @@ export const exitEquipment = async (req: Request, res: Response): Promise<void> 
 
         const { equipmentId, quantity, responsibleId, reason } = req.body;
 
+        if (!user.branchId) {
+            res.status(400).json({
+                message: 'El usuario no tiene una sucursal asignada'
+            });
+            return;
+        }
+
         const result = await processEquipmentExit({
             equipmentId,
             quantity,

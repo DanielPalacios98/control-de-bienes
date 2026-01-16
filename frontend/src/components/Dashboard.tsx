@@ -16,6 +16,10 @@ import {
 import { mockMovements } from '../services/mockData';
 import { inventoryAPI, branchAPI, BranchResponse } from '../services/api';
 import { convertToEquipment, convertFromEquipment } from '../services/converters';
+import { useFormValidation } from '../hooks/useFormValidation';
+import { useAutocomplete } from '../hooks/useAutocomplete';
+import ValidatedInput from './ValidatedInput';
+import AutocompleteInput from './AutocompleteInput';
 
 interface DashboardProps {
   user: User;
@@ -34,11 +38,63 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<'individual' | 'quantity' | 'bulk'>('individual');
+  const [formData, setFormData] = useState({
+    description: '',
+    inventoryId: '',
+    quantity: '1',
+    prefix: '',
+    unit: UnitType.UNIDAD,
+    condition: EquipmentCondition.SERVIBLE,
+    branchId: ''
+  });
+
+  // Hook de autocompletado
+  const autocomplete = useAutocomplete(inventory);
 
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Equipment | null>(null);
+
+  // Validaciones del formulario de ingreso
+  const validation = useFormValidation({
+    description: {
+      required: true,
+      minLength: 5,
+      maxLength: 200,
+      custom: (value) => {
+        if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,.]+$/.test(value)) {
+          return 'Solo letras, números y caracteres básicos';
+        }
+        return null;
+      }
+    },
+    inventoryId: {
+      required: entryType === 'individual',
+      pattern: /^[A-Z0-9\-]+$/,
+      custom: (value) => {
+        if (entryType === 'individual' && value) {
+          const exists = inventory.some(item => item.inventoryId === value);
+          if (exists) return 'Este ID ya existe en el inventario';
+        }
+        return null;
+      }
+    },
+    prefix: {
+      required: entryType === 'bulk',
+      pattern: /^[A-Z0-9\-]+$/,
+      maxLength: 10
+    },
+    quantity: {
+      required: entryType !== 'individual',
+      custom: (value) => {
+        const num = parseInt(value);
+        if (isNaN(num) || num < 1) return 'Cantidad debe ser mayor a 0';
+        if (num > 10000) return 'Cantidad excesiva, verifique';
+        return null;
+      }
+    }
+  });
 
   // Load inventory and branches from API
   useEffect(() => {
@@ -51,6 +107,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         ]);
         setInventory(inventoryData.map(convertToEquipment));
         setBranches(branchData);
+        // Set default branch
+        if (branchData.length > 0) {
+          setFormData(prev => ({ ...prev, branchId: branchData[0]._id }));
+        }
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -59,6 +119,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     };
     loadData();
   }, []);
+
+  // Reset form when modal opens/closes or entry type changes
+  useEffect(() => {
+    if (isEntryModalOpen) {
+      setFormData({
+        description: '',
+        inventoryId: '',
+        quantity: '1',
+        prefix: '',
+        unit: UnitType.UNIDAD,
+        condition: EquipmentCondition.SERVIBLE,
+        branchId: branches[0]?._id || ''
+      });
+      validation.clearErrors();
+    }
+  }, [isEntryModalOpen, entryType]);
 
   const filteredInventory = useMemo(() => {
     return inventory.filter(item => {
@@ -73,26 +149,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
   const handleEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget as HTMLFormElement);
-    const data = Object.fromEntries(formData);
+
+    // Validar el formulario antes de enviar
+    const isValid = validation.validateForm(formData);
+    if (!isValid) {
+      return;
+    }
+
     const timestamp = new Date().toISOString();
-    const branchId = (data.branchId as string) || user.branchId || branches[0]?._id || '';
+    const branchId = formData.branchId || user.branchId || branches[0]?._id || '';
 
     if (!branchId || branchId === '') {
       alert('Por favor selecciona una sucursal válida');
       return;
     }
 
-    console.log('Creating equipment with branchId:', branchId);
-
     try {
       if (entryType === 'individual') {
         const newItem = await inventoryAPI.create({
-          inventoryId: data.inventoryId as string,
+          inventoryId: formData.inventoryId,
           hasIndividualId: true,
-          description: data.description as string,
-          unit: data.unit as string,
-          condition: data.condition as string,
+          description: formData.description,
+          unit: formData.unit,
+          condition: formData.condition,
           status: EquipmentStatus.AVAILABLE,
           locationType: LocationType.BODEGA,
           entryDate: timestamp.split('T')[0],
@@ -104,26 +183,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       } else if (entryType === 'quantity') {
         const newItem = await inventoryAPI.create({
           hasIndividualId: false,
-          description: data.description as string,
-          unit: data.unit as string,
-          condition: data.condition as string,
+          description: formData.description,
+          unit: formData.unit,
+          condition: formData.condition,
           status: EquipmentStatus.AVAILABLE,
           locationType: LocationType.BODEGA,
           entryDate: timestamp.split('T')[0],
           currentResponsibleId: user.id,
           branchId: branchId,
-          stock: Number(data.quantity)
+          stock: Number(formData.quantity)
         });
         setInventory(prev => [...prev, convertToEquipment(newItem)]);
       } else if (entryType === 'bulk') {
-        const qty = Number(data.quantity);
+        const qty = Number(formData.quantity);
         for (let i = 1; i <= qty; i++) {
           const newItem = await inventoryAPI.create({
-            inventoryId: `${data.prefix || 'ID'}-${Date.now()}-${i}`,
+            inventoryId: `${formData.prefix || 'ID'}-${Date.now()}-${i}`,
             hasIndividualId: true,
-            description: data.description as string,
-            unit: data.unit as string,
-            condition: data.condition as string,
+            description: formData.description,
+            unit: formData.unit,
+            condition: formData.condition,
             status: data.destination === 'egreso' ? EquipmentStatus.IN_USE : EquipmentStatus.AVAILABLE,
             locationType: data.destination === 'egreso' ? LocationType.EN_USO : LocationType.BODEGA,
             entryDate: timestamp.split('T')[0],
@@ -183,7 +262,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     }
   };
 
-  const handleExit = (e: React.FormEvent) => {
+  const handleExit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
     const formData = new FormData(e.currentTarget as HTMLFormElement);
@@ -197,73 +276,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       return;
     }
 
-    const timestamp = new Date().toISOString();
-
-    if (selectedItem.hasIndividualId) {
-      setInventory(prev => prev.map(item => {
-        if (item.id === selectedItem.id) {
-          return {
-            ...item,
-            status: EquipmentStatus.IN_USE,
-            locationType: LocationType.EN_USO,
-            currentResponsibleId: respId,
-            currentResponsibleName: respName
-          };
-        }
-        return item;
-      }));
-    } else {
-      setInventory(prev => {
-        const updated = prev.map(item => {
-          if (item.id === selectedItem.id) {
-            return { ...item, stock: item.stock - qtyToExit };
-          }
-          return item;
-        }).filter(item => item.stock > 0);
-
-        const existingInUseIndex = updated.findIndex(i =>
-          i.description === selectedItem.description &&
-          i.currentResponsibleId === respId &&
-          i.locationType === LocationType.EN_USO
-        );
-
-        if (existingInUseIndex !== -1) {
-          updated[existingInUseIndex].stock += qtyToExit;
-          return [...updated];
-        } else {
-          const inUseItem: Equipment = {
-            id: `SYS-USE-${Date.now()}`,
-            hasIndividualId: false,
-            description: selectedItem.description,
-            unit: selectedItem.unit,
-            condition: selectedItem.condition,
-            status: EquipmentStatus.IN_USE,
-            locationType: LocationType.EN_USO,
-            entryDate: selectedItem.entryDate,
-            currentResponsibleId: respId,
-            currentResponsibleName: respName,
-            branchId: selectedItem.branchId,
-            stock: qtyToExit
-          };
-          return [...updated, inUseItem];
-        }
+    try {
+      // Llamada al backend para persistir el egreso
+      await inventoryAPI.exit({
+        equipmentId: selectedItem.id,
+        quantity: qtyToExit,
+        responsibleId: respId,
+        reason: reason || undefined
       });
+
+      // Recargar el inventario completo desde el backend para reflejar los cambios
+      const updated = await inventoryAPI.getAll();
+      setInventory(updated);
+
+      // Recargar los movimientos
+      const movements = await movementAPI.getAll();
+      setMovements(movements);
+
+      setIsExitModalOpen(false);
+      alert('Egreso procesado correctamente');
+    } catch (error: any) {
+      console.error('Error al procesar egreso:', error);
+      alert(error.response?.data?.message || 'Error al procesar el egreso');
     }
-
-    setMovements(prev => [...prev, {
-      id: `mv-${Date.now()}`,
-      equipmentId: selectedItem.id,
-      type: MovementType.OUT,
-      quantity: qtyToExit,
-      responsibleId: respId,
-      responsibleName: respName,
-      performedByUserId: user.id,
-      branchId: selectedItem.branchId,
-      timestamp,
-      reason
-    }]);
-
-    setIsExitModalOpen(false);
   };
 
   const inputClasses = "w-full border border-gray-300 bg-white text-gray-900 p-2.5 rounded-lg mt-1 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition-all font-medium";
@@ -485,27 +520,98 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
             <form onSubmit={handleEntry} className="p-10 space-y-8 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-2 gap-8">
-                <div className="col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción Técnica del Bien</label>
-                  <input name="description" placeholder="Ej: Chaleco Táctico III-A" required className={inputClasses} />
-                </div>
+                <AutocompleteInput
+                  label="Descripción Técnica del Bien"
+                  name="description"
+                  placeholder="Ej: Chaleco Táctico III-A"
+                  required
+                  value={formData.description}
+                  suggestions={autocomplete.getSuggestions(formData.description, 'description')}
+                  onFieldChange={(value) => {
+                    setFormData(prev => ({ ...prev, description: value }));
+                    validation.handleFieldChange('description', value);
+                  }}
+                  onSelectSuggestion={(value) => {
+                    const defaults = autocomplete.getContextualDefaults(value);
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      description: value,
+                      unit: defaults.unit as UnitType,
+                      condition: defaults.condition as EquipmentCondition
+                    }));
+                    validation.handleFieldChange('description', value);
+                  }}
+                  onFieldBlur={() => validation.handleFieldBlur('description')}
+                  error={validation.getFieldError('description')}
+                  isValid={validation.isFieldValid('description')}
+                  className="col-span-2"
+                />
 
                 {entryType === 'individual' && (
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ID / Serial de Fábrica</label>
-                    <input name="inventoryId" placeholder="Ej: CH-2024-001" required className={inputClasses} />
+                  <div className="col-span-2">
+                    <ValidatedInput
+                      label="ID / Serial de Fábrica"
+                      name="inventoryId"
+                      placeholder="Ej: CH-2024-001"
+                      required
+                      value={formData.inventoryId}
+                      onFieldChange={(value) => {
+                        const upper = value.toUpperCase();
+                        setFormData(prev => ({ ...prev, inventoryId: upper }));
+                        validation.handleFieldChange('inventoryId', upper);
+                      }}
+                      onFieldBlur={() => validation.handleFieldBlur('inventoryId')}
+                      error={validation.getFieldError('inventoryId')}
+                      isValid={validation.isFieldValid('inventoryId')}
+                    />
+                    {autocomplete.cache.prefixes.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Generar con prefijo:</span>
+                        {autocomplete.cache.prefixes.slice(0, 5).map(prefix => (
+                          <button
+                            key={prefix}
+                            type="button"
+                            onClick={async () => {
+                              const nextId = await autocomplete.getNextSequentialIdFromServer(prefix);
+                              setFormData(prev => ({ ...prev, inventoryId: nextId }));
+                              validation.handleFieldChange('inventoryId', nextId);
+                            }}
+                            className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all"
+                          >
+                            {prefix}-XXXX
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {entryType !== 'individual' && (
-                  <div className="flex gap-5">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cantidad Recibida</label>
-                      <input name="quantity" type="number" min="1" required defaultValue="1" className={inputClasses} />
-                    </div>
+                  <div className="flex gap-5 col-span-2">
+                    <ValidatedInput
+                      label="Cantidad Recibida"
+                      name="quantity"
+                      type="number"
+                      min="1"
+                      required
+                      value={formData.quantity}
+                      onFieldChange={(value) => {
+                        setFormData(prev => ({ ...prev, quantity: value }));
+                        validation.handleFieldChange('quantity', value);
+                      }}
+                      onFieldBlur={() => validation.handleFieldBlur('quantity')}
+                      error={validation.getFieldError('quantity')}
+                      isValid={validation.isFieldValid('quantity')}
+                      className="flex-1"
+                    />
                     <div className="w-32">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidad</label>
-                      <select name="unit" className={inputClasses}>
+                      <select 
+                        name="unit" 
+                        value={formData.unit}
+                        onChange={(e) => setFormData(prev => ({ ...prev, unit: e.target.value as UnitType }))}
+                        className={inputClasses}
+                      >
                         {Object.values(UnitType).map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
                     </div>
@@ -513,15 +619,51 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                 )}
 
                 {entryType === 'bulk' && (
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Prefijo de Seriales</label>
-                    <input name="prefix" placeholder="Ej: FAL-" required className={inputClasses} />
+                  <div className="col-span-2">
+                    <AutocompleteInput
+                      label="Prefijo de Seriales"
+                      name="prefix"
+                      placeholder="Ej: FAL"
+                      required
+                      value={formData.prefix}
+                      suggestions={autocomplete.getSuggestions(formData.prefix, 'prefix')}
+                      onFieldChange={(value) => {
+                        const upper = value.toUpperCase();
+                        setFormData(prev => ({ ...prev, prefix: upper }));
+                        validation.handleFieldChange('prefix', upper);
+                      }}
+                      onSelectSuggestion={async (value) => {
+                        const upper = value.toUpperCase();
+                        const nextId = await autocomplete.getNextSequentialIdFromServer(upper);
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          prefix: upper,
+                          inventoryId: nextId
+                        }));
+                        validation.handleFieldChange('prefix', upper);
+                      }}
+                      onFieldBlur={() => validation.handleFieldBlur('prefix')}
+                      error={validation.getFieldError('prefix')}
+                      isValid={validation.isFieldValid('prefix')}
+                    />
+                    {formData.prefix && (
+                      <p className="text-xs text-indigo-600 mt-2 ml-1 font-medium flex items-center gap-2">
+                        <i className="fas fa-info-circle"></i>
+                        Próximo ID: <span className="font-bold">{autocomplete.getNextSequentialId(formData.prefix)}</span>
+                        <i className="fas fa-sync-alt text-slate-400 ml-2" title="Sincronizado con servidor"></i>
+                      </p>
+                    )}
                   </div>
                 )}
 
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condición Actual</label>
-                  <select name="condition" className={inputClasses}>
+                  <select 
+                    name="condition" 
+                    value={formData.condition}
+                    onChange={(e) => setFormData(prev => ({ ...prev, condition: e.target.value as EquipmentCondition }))}
+                    className={inputClasses}
+                  >
                     <option value={EquipmentCondition.SERVIBLE}>Servible</option>
                     <option value={EquipmentCondition.CONDENADO}>Condenado</option>
                   </select>
@@ -529,16 +671,39 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bodega Receptora</label>
-                  <select name="branchId" defaultValue={branches[0]?._id} required className={inputClasses}>
+                  <select 
+                    name="branchId" 
+                    value={formData.branchId}
+                    onChange={(e) => setFormData(prev => ({ ...prev, branchId: e.target.value }))}
+                    required 
+                    className={inputClasses}
+                  >
                     {branches.length === 0 && <option value="">Cargando sucursales...</option>}
                     {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>
 
+              {/* Resumen de validación */}
+              {Object.keys(validation.errors).length > 0 && Object.keys(validation.touched).length > 0 && (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl">
+                  <div className="flex items-center gap-2 text-rose-700 font-bold text-sm">
+                    <i className="fas fa-exclamation-circle"></i>
+                    <span>Por favor corrige los errores antes de continuar</span>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-8 flex justify-end gap-5 border-t border-slate-50">
                 <button type="button" onClick={() => setIsEntryModalOpen(false)} className="px-8 py-4 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600 transition-all">Cancelar</button>
-                <button type="submit" className="bg-indigo-600 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95">Validar e Ingresar</button>
+                <button 
+                  type="submit" 
+                  disabled={Object.keys(validation.errors).some(key => validation.errors[key])}
+                  className="bg-indigo-600 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-600"
+                >
+                  <i className="fas fa-check-circle mr-2"></i>
+                  Validar e Ingresar
+                </button>
               </div>
             </form>
           </div>
@@ -663,11 +828,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 flex justify-between items-center">
                 <div className="space-y-0.5">
                   <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Saldo en Bodega</span>
-                  <p className="text-xs font-medium text-emerald-600 italic">Ala {selectedItem.branchId.toUpperCase()}</p>
+                  <p className="text-xs font-medium text-emerald-600 italic">Ala {selectedItem.branchId || 'N/A'}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-3xl font-black text-emerald-600">{selectedItem.stock}</span>
-                  <span className="text-xs font-black text-emerald-500 ml-1">{selectedItem.unit}</span>
+                  <span className="text-3xl font-black text-emerald-600">{selectedItem.stock || 0}</span>
+                  <span className="text-xs font-black text-emerald-500 ml-1">{selectedItem.unit || 'UN'}</span>
                 </div>
               </div>
 
@@ -677,7 +842,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                   <input
                     name="quantity"
                     type="number"
-                    max={selectedItem.stock}
+                    max={selectedItem.stock || 999}
                     min="1"
                     defaultValue={selectedItem.hasIndividualId ? 1 : ''}
                     readOnly={selectedItem.hasIndividualId}
