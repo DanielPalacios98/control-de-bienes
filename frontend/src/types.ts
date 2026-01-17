@@ -48,6 +48,7 @@ export interface Equipment {
   id: string;
   
   // Clasificación
+  ord: number;
   esigeft: boolean;
   esbye: boolean;
   tipo: string;

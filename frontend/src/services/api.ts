@@ -51,6 +51,7 @@ export const authAPI = {
 
 export interface EquipmentResponse {
     _id: string;
+    ord: number;
     esigeft: boolean;
     esbye: boolean;
     tipo: string;

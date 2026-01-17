@@ -81,9 +81,8 @@ const processReturn = async (loanRecordId, performedById, branchId, observacion)
                 equipmentId: equipment._id,
                 type: Movement_1.MovementType.IN,
                 quantity: loanRecord.cantidad,
-                responsibleId: loanRecord.performedById,
-                responsibleName: loanRecord.responsibleName,
-                performedByUserId: performedById,
+                responsibleId: loanRecord.custodianId, // ✅ El custodio es el responsable
+                performedById: performedById, // ✅ Campo correcto
                 branchId: branchId,
                 reason: `Devolución de ${loanRecord.responsibleName} - ${loanRecord.responsibleArea || 'Sin área especificada'}`
             }], { session });
