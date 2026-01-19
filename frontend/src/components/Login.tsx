@@ -42,14 +42,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const inputClasses = "w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder-gray-400 font-medium shadow-sm";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-700/10">
+    <div className="min-h-screen flex items-center justify-center bg-[#0B1C3E] px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 border border-[#375586]/30">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-32 h-32 mb-4">
             <img src="/sello-fae-png.png" alt="Sello FAE" className="w-full h-full object-contain filter drop-shadow-xl" />
           </div>
-          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Control de Bienes</h2>
-          <p className="text-gray-500 mt-2 font-medium">Control de enseres de la Fuerza Aérea Ecuatoriana</p>
+          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight uppercase">Ala de Combate Nro.22</h2>
+          <p className="text-gray-500 mt-2 font-medium">Bodega Equipo y Vestuario</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">

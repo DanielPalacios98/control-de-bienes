@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import LoanRecord from './models/LoanRecord';
-import Custodian from './models/Custodian';
+import LoanRecord from '../models/LoanRecord';
+import Custodian from '../models/Custodian';
 
 // Cargar variables de entorno
 dotenv.config();

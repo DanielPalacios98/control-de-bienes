@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import Equipment from './models/Equipment';
-import LoanRecord from './models/LoanRecord';
-import Movement from './models/Movement';
+import Equipment from '../models/Equipment';
+import LoanRecord from '../models/LoanRecord';
+import Movement from '../models/Movement';
 
 // Cargar variables de entorno
 dotenv.config();

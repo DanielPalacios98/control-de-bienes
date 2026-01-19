@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import User, { UserRole } from './models/User';
-import Branch from './models/Branch';
-import Equipment from './models/Equipment';
-import Movement from './models/Movement';
-import Custodian from './models/Custodian';
-import connectDB from './db';
+import User, { UserRole } from '../models/User';
+import Branch from '../models/Branch';
+import Equipment from '../models/Equipment';
+import Movement from '../models/Movement';
+import Custodian from '../models/Custodian';
+import connectDB from '../db';
 
 dotenv.config();
 

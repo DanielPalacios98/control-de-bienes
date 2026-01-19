@@ -32,7 +32,7 @@ app.use('/api/custodians', custodianRoutes);
 app.use('/api/loan-records', loanRecordRoutes);
 
 app.get('/', (req, res) => {
-    res.send('API Control de Bienes FAE is running');
+    res.send('API Bodega Equipo y Vestuario FAE is running');
 });
 
 app.listen(PORT, '0.0.0.0', () => {
