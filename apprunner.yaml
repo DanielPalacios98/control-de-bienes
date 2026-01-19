@@ -8,3 +8,10 @@ build:
       - npm --prefix backend run build
 run:
   command: "npm --prefix backend run start:prod"
+  env:
+    - name: PORT
+      value: "8080"
+    - name: MONGODB_URI
+      value: "mongodb+srv://danielpalaciosgall06_db_user:daniel123@cluster0.pplyzsi.mongodb.net/control-bienes-fae"
+    - name: JWT_SECRET
+      value: "fae_control_bienes_secret_key_2024"
