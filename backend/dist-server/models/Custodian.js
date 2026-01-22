@@ -66,7 +66,5 @@ const CustodianSchema = new mongoose_1.Schema({
     timestamps: true,
     collection: 'custodians'
 });
-// Índice para búsquedas rápidas
-CustodianSchema.index({ identification: 1 });
 CustodianSchema.index({ isDefault: 1 });
 exports.default = mongoose_1.default.model('Custodian', CustodianSchema);

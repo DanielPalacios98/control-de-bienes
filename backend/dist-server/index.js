@@ -30,7 +30,7 @@ app.use('/api/branches', branchRoutes_1.default);
 app.use('/api/custodians', custodianRoutes_1.default);
 app.use('/api/loan-records', loanRecordRoutes_1.default);
 app.get('/', (req, res) => {
-    res.send('API Control de Bienes FAE is running');
+    res.send('API Bodega Equipo y Vestuario FAE is running');
 });
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);

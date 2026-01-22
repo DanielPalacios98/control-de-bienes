@@ -3,7 +3,7 @@ import axios from 'axios';
 // Detectar si estamos en producción (AWS App Runner) o local
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const API_URL = import.meta.env.VITE_API_URL || (isLocal 
-  ? 'http://localhost:8080/api' 
+  ? 'http://localhost:5000/api' 
   : 'https://jgjusabsp3.us-east-1.awsapprunner.com/api');
 
 const api = axios.create({
@@ -23,6 +23,23 @@ api.interceptors.request.use(
         return config;
     },
     (error) => Promise.reject(error)
+);
+
+// Global response handler: if token expired or unauthorized, clear session and redirect to login
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        const status = error?.response?.status;
+        if (status === 401) {
+            try {
+                localStorage.removeItem('token');
+                localStorage.removeItem('currentUser');
+            } catch (e) { console.error(e); }
+            // Redirect to login page to force re-authentication
+            try { window.location.href = '/'; } catch (e) { /* ignore in non-browser envs */ }
+        }
+        return Promise.reject(error);
+    }
 );
 
 export interface LoginResponse {

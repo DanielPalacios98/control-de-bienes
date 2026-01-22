@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Equipment from '../models/Equipment';
+import LoanRecord from '../models/LoanRecord';
 import { processOutcome } from '../services/equipmentService';
 
 /**
@@ -11,14 +12,19 @@ export const getEquipment = async (req: Request, res: Response): Promise<void> =
     try {
         // @ts-ignore
         const user = req.user;
+        console.log(`[Inventory] Getting equipment for user: ${user._id} (${user.role})`);
 
         const query = user.role === 'SUPER_ADMIN'
             ? {}
             : { branchId: user.branchId };
 
+        console.log('[Inventory] Query:', query);
+
         const equipment = await Equipment.find(query)
             .populate('branchId', 'name location')
             .sort({ tipo: 1, ord: 1 }); // Ordenar por TIPO y luego por ORD
+
+        console.log(`[Inventory] Found ${equipment.length} items`);
 
         res.json(equipment);
     } catch (error) {
@@ -53,7 +59,7 @@ export const createEquipment = async (req: Request, res: Response): Promise<void
 
         // Validar que las cantidades sean no-negativas
         const { materialServible = 0, materialCaducado = 0, materialPrestado = 0 } = req.body;
-        
+
         if (materialServible < 0 || materialCaducado < 0 || materialPrestado < 0) {
             res.status(400).json({ message: 'Las cantidades no pueden ser negativas' });
             return;
@@ -87,7 +93,7 @@ export const updateEquipment = async (req: Request, res: Response): Promise<void
     try {
         // Validar que las cantidades sean no-negativas si se están actualizando
         const { materialServible, materialCaducado, materialPrestado } = req.body;
-        
+
         if ((materialServible !== undefined && materialServible < 0) ||
             (materialCaducado !== undefined && materialCaducado < 0) ||
             (materialPrestado !== undefined && materialPrestado < 0)) {
@@ -120,6 +126,19 @@ export const updateEquipment = async (req: Request, res: Response): Promise<void
 // Delete equipment
 export const deleteEquipment = async (req: Request, res: Response): Promise<void> => {
     try {
+        // Verificar si hay préstamos activos
+        const activeLoans = await LoanRecord.countDocuments({
+            equipmentId: req.params.id,
+            status: 'prestado'
+        });
+
+        if (activeLoans > 0) {
+            res.status(400).json({
+                message: `No se puede eliminar: Hay ${activeLoans} préstamo(s) activo(s) asociado(s).`
+            });
+            return;
+        }
+
         const equipment = await Equipment.findByIdAndDelete(req.params.id);
 
         if (!equipment) {
@@ -181,14 +200,14 @@ export const registerOutcome = async (req: Request, res: Response): Promise<void
     try {
         // @ts-ignore
         const user = req.user;
-        const { 
-            equipmentId, 
-            cantidad, 
+        const {
+            equipmentId,
+            cantidad,
             responsibleName,
             responsibleIdentification,
             responsibleArea,
             custodianId,
-            observacion 
+            observacion
         } = req.body;
 
         // Validaciones
@@ -229,7 +248,7 @@ export const registerOutcome = async (req: Request, res: Response): Promise<void
         });
     } catch (error: any) {
         console.error('Error registering outcome:', error);
-        res.status(400).json({ 
+        res.status(400).json({
             message: error.message || 'Error al registrar el egreso'
         });
     }
